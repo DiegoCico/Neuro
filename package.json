@@ -1,0 +1,13 @@
+{
+  "name": "fullstack-app",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "cd backend && flask run",
+    "dev": "concurrently -k -n FRONTEND,BACKEND \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "build": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
