@@ -9,6 +9,7 @@ import os
 
 import base64, io, numpy as np
 
+import network
 import messager as msgs
 
 import profiles_api as profiles
@@ -32,7 +33,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-app = Flask(__name__)
+# app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": CORS_ORIGINS}})
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": CORS_ORIGINS,
@@ -374,6 +375,106 @@ def suggest_reply():
         traceback.print_exc()
         return jsonify({"ok": False, "error": "Internal error"}), 500
 
+@app.route('/api/posts', methods=["POST"])
+def create_post():
+    auth_header = request.headers.get('Authorization')
+    uid = profiles.verify_bearer_uid(auth_header)
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    text = request.form.get("text", '').strip()
+
+    media_url = None
+    media_type = None
+
+    doc_ref = db.collection('users').document(uid).get()
+    data = doc_ref.to_dict()
+
+    post = {
+        'userId':uid,
+        'userFullName':data.get('fullName'),
+        'text':text,
+        'mediaUrl':media_url,
+        'mediaType':media_type,
+        'createdAt':firestore.SERVER_TIMESTAMP,
+        'likes':[],
+        'commentsCount':0
+    }
+
+    doc_ref = db.collection('posts').document()
+    doc_ref.set(post)
+
+    saved_post = doc_ref.get().to_dict()
+    saved_post["id"] = doc_ref.id
+
+    return jsonify({"ok": True, "post": saved_post})
+
+@app.route('/api/posts', methods=['GET'])
+def fetch_posts():
+    try:
+        post_ref = db.collection('posts')
+
+        docs = post_ref.stream()
+
+        posts = []
+        for doc in docs:
+            data = doc.to_dict()
+            data['id'] = doc.id
+
+            created_at = data.get('createdAt')
+            if created_at:
+                data["createdAt"] = created_at.isoformat()
+
+            posts.append(data)
+
+        return jsonify({"ok": True, "posts": posts}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    
+@app.route('/api/posts/like', methods=['POST'])
+def like_post():
+    try:
+        auth_header = request.headers.get('Authorization')
+        uid = profiles.verify_bearer_uid(auth_header)
+        if not uid:
+            return jsonify({"ok": False, "error": "unauthorized"}), 401
+        
+        data = request.get_json(silent=True) or {}
+        post_id = data.get('postId')
+        if not post_id:
+            return jsonify({"ok": False, "error": "missing postId"}), 400
+        
+        post_ref = db.collection('posts').document(post_id)
+
+        post_ref.update({
+            "likes": firestore.ArrayUnion([uid])
+        })
+
+        return jsonify({"ok": True, "postId": post_id, "likedBy": uid}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/network/followers", methods=["GET", "OPTIONS"])
+def get_followers():
+    if request.method == "OPTIONS":
+        resp = app.make_default_options_response()
+        resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        return resp, 204
+
+    try:
+        me_uid, _ = network.verify_token(request)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 401
+
+    try:
+        follower_uids = network._fetch_follower_uids(me_uid)
+        profiles_map = network._load_profiles(follower_uids)
+        items = [network._shape_follower_item(profiles_map[u]) for u in follower_uids if u in profiles_map]
+        return jsonify({"items": items}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Failed to load followers: {e}"}), 500
 
 
 

@@ -97,12 +97,25 @@
 .popup-footer {
   padding: 0 32px 32px 32px;
 }
-.popup-post-btn {
-  background: #ddd;
-  color: #666;
-  border: none;
-  border-radius: 8px;
-  padding: 14px 22px;
+.post-btn {
   font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 9999px; /* pill shape */
+  padding: 8px 22px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* Active state (black background, white text) */
+.post-btn.active {
+  background: #000000;
+  color: #ffffff;
+}
+
+/* Disabled state (light gray background, gray text) */
+.post-btn.disabled {
+  background: #e0e0e0;
+  color: #888888;
   cursor: not-allowed;
 }

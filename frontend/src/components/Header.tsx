@@ -317,10 +317,10 @@ export default function Header({ onSearch }: Props) {
                   className="dropdown-item"
                   onClick={() => {
                     setNetworkOpen(false);
-                    navigate("/your-network");
+                    navigate("/your-neuroweb");
                   }}
                 >
-                  Your network
+                  Your NeuroWeb
                 </button>
               </div>
             )}

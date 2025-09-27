@@ -1,0 +1,110 @@
+/* ========= POST CARD ========= */
+
+.post-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  padding: 1rem;
+  width: 100%;
+  max-width: 600px;
+  margin-bottom: 1.5rem;
+  transition: box-shadow 0.2s ease, border 0.2s ease;
+}
+
+.post-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+/* Header */
+.post-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.post-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.post-username {
+  flex: 1;
+  margin-left: 0.75rem;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.post-mail-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.post-mail-btn img {
+  width: 24px;
+  height: 24px;
+  filter: brightness(0) saturate(100%) invert(38%) sepia(99%) saturate(1420%) hue-rotate(345deg) brightness(92%) contrast(90%);
+}
+
+/* Body */
+.post-body {
+  margin: 1rem 0;
+}
+
+.post-text {
+  font-size: 0.95rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* Tags */
+.post-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.post-tag {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.post-tag:hover {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Footer */
+.post-footer {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.post-like-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.post-like-btn:hover {
+  color: var(--text);
+}

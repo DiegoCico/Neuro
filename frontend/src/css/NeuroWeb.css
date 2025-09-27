@@ -1,0 +1,106 @@
+/* Root layout */
+.neuroweb-root { min-height: 100vh; }
+
+/* 2-column layout: canvas + sidebar */
+.neuroweb-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  height: calc(100vh - 64px);
+  gap: 0;
+}
+
+/* Canvas wrap + svg */
+.neuroweb-canvas-wrap { position: relative; overflow: hidden; }
+.neuroweb-svg {
+  width: 100%; height: 100%; background: transparent;
+  touch-action: none; cursor: grab; user-select: none;
+}
+.neuroweb-svg:active { cursor: grabbing; }
+
+/* ---------------------------- Edges and arrows ---------------------------- */
+.neuroweb-edge { fill: none; }
+.neuroweb-edge.edge-core { stroke: #d8d8d8; stroke-width: 2.2; }
+.neuroweb-edge.edge-branch { stroke: #6cc7ff; stroke-width: 1.8; opacity: 0.9; }
+
+/* ------------------------------- Nodes ----------------------------------- */
+.neuroweb-node-internet { fill: #111; stroke: #fff; stroke-width: 2.4px; }
+.neuroweb-node-label-internet { fill: #f6f6f6; font-weight: 700; font-size: 14px; }
+
+.neuroweb-node-occ {
+  fill: #111; stroke: #fff; stroke-width: 2px;
+  transition: transform 160ms ease, fill 160ms ease;
+}
+.neuroweb-node-occ.is-focused { fill: #fff; }
+.neuroweb-node-label-occ { fill: #b8b8b8; font-size: 12px; }
+
+/* Interest circles are visually distinct */
+.neuroweb-node-interest {
+  fill: #0f1a2a;             /* deep blue fill */
+  stroke: #6cc7ff;           /* cyan stroke */
+  stroke-width: 2px;
+  transition: opacity 160ms ease, transform 120ms ease, stroke-width 120ms ease;
+}
+.neuroweb-node-interest.is-dim { opacity: 0.45; }
+.neuroweb-node-interest.is-active { stroke-width: 3px; }
+.neuroweb-node-label-interest { fill: #b8b8b8; font-size: 11px; }
+
+.neuroweb-hit { cursor: pointer; }
+
+/* Floating controls */
+.neuroweb-controls {
+  position: absolute; left: 16px; bottom: 16px;
+  display: flex; gap: 8px; align-items: center;
+}
+.neuroweb-zoom { display: flex; gap: 6px; }
+
+.nw-btn, .nw-icon-btn {
+  border-radius: 10px; border: 1px solid #2a2a2a;
+  background: #111; color: #f6f6f6; padding: 8px 12px; font: inherit;
+}
+.nw-icon-btn { padding: 8px 12px; min-width: 40px; }
+.nw-btn.solid { border-color: #ffffff; background: #ffffff; color: #000; }
+.nw-btn.ghost { background: transparent; }
+
+/* Overlays */
+.neuroweb-center { position: absolute; inset: 0; display: grid; place-items: center; }
+.neuroweb-muted { color: #b8b8b8; }
+.neuroweb-error { color: #ffb3b3; }
+
+/* Sidebar */
+.neuroweb-aside { border-left: 1px solid #2a2a2a; overflow: auto; background: #111; color: #f6f6f6; }
+.neuroweb-aside-head { padding: 16px; display: flex; align-items: center; justify-content: space-between; }
+.neuroweb-title { font-weight: 800; }
+.neuroweb-subtle { color: #b8b8b8; font-size: 13px; }
+.neuroweb-strong { color: #f6f6f6; }
+
+/* Occupation list */
+.neuroweb-occs { padding: 12px; display: grid; gap: 8px; }
+.neuroweb-occ {
+  text-align: left; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid #2a2a2a; background: #0f0f0f; color: #f6f6f6;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.neuroweb-occ:hover { border-color: #ffffff; }
+.neuroweb-occ.is-active { border-color: #ffffff; background: #1a1a1a; }
+.neuroweb-occ-title { font-weight: 600; }
+.neuroweb-occ-sub { color: #b8b8b8; font-size: 12px; }
+
+/* People list */
+.neuroweb-people { padding: 12px; border-top: 1px solid #2a2a2a; }
+.neuroweb-people-head { font-weight: 700; margin-bottom: 8px; }
+.neuroweb-people-list { display: grid; gap: 8px; }
+.neuroweb-person {
+  display: flex; align-items: center; gap: 10px; padding: 8px;
+  border-radius: 10px; border: 1px solid #2a2a2a; background: #0f0f0f;
+}
+.neuroweb-avatar { border-radius: 50%; object-fit: cover; width: 32px; height: 32px; }
+.neuroweb-person-main { flex: 1; }
+.neuroweb-person-name { font-weight: 600; }
+.neuroweb-person-sub { color: #b8b8b8; font-size: 12px; }
+.neuroweb-person-actions { display: flex; gap: 8px; }
+
+/* Responsive */
+@media (max-width: 960px) {
+  .neuroweb-grid { grid-template-columns: 1fr; height: auto; min-height: calc(100vh - 64px); }
+  .neuroweb-aside { border-left: none; border-top: 1px solid #2a2a2a; }
+}

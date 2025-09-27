@@ -9,6 +9,7 @@ import Onboarding from "./pages/Onboarding";
 import RequireAuth from "./components/RequireAuth";
 import ProfilePage, { RedirectToMyProfile } from "./pages/ProfilePage";
 import MessagesScreen from "./pages/MessagesScreen";
+import NeuroWeb from "./pages/NeuroWeb";
 
 export default function App() {
   return (
@@ -62,6 +63,14 @@ export default function App() {
         element={
           <RequireAuth>
             <MessagesScreen />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/your-neuroweb"
+        element={
+          <RequireAuth>
+            <NeuroWeb />
           </RequireAuth>
         }
       />

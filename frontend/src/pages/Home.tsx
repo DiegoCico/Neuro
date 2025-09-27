@@ -5,16 +5,21 @@ import "../css/Home.css";
 import Header from "../components/Header";
 import { fetchMe, type ProfileData } from "../userProfile";
 import NewPostPopUp from "../components/NewPostPopUp";
+import Post from "../components/Post";
+import { API_URL } from "../config";
+import { getAuth } from "firebase/auth";
 
-export type Post = {
+export type PostData = {
   id: string;
-  author: string;
-  timestamp: string;
+  userId: string;
+  userFullName: string;
   text?: string;
-  imageUrl?: string; // reserved for future (Storage)
-  likes: number;
-  comments: number;
-};
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  createdAt: string;
+  likes: string[];
+  commentsCount: number;
+};  
 
 export default function Home() {
   const [query, setQuery] = useState<string>("");
@@ -22,6 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(true);
   const [newPost, setNewPost] = useState(false)
+  const [posts, setPosts] = useState<PostData[]>([])
 
   useEffect(() => {
     (async () => {
@@ -30,12 +36,31 @@ export default function Home() {
         if (data?.firstName) setFirstName(data.firstName);
         setAuthorized(true);
       } catch {
-        setAuthorized(false); // not logged in → redirect
+        setAuthorized(false);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
+
+  useEffect(() => {
+    async function fetchPosts() {
+      try {
+        const res = await fetch(`${API_URL}/api/posts`)
+        const data = await res.json()
+        if (data.ok) {
+          console.log(data)
+          setPosts(data.posts)
+        } else {
+          console.error('Failed to fetch', data.error)
+        }
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+      }
+    }
+
+    fetchPosts()
+  }, [])
 
   const handlePopUp = (close:boolean) => {
     setNewPost(close)
@@ -51,6 +76,37 @@ export default function Home() {
 
   if (!authorized) {
     return <Navigate to="/auth" replace />;
+  }
+
+  const handleLikePost = async(postId:string) => {
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) {
+        console.error("Not logged in");
+        return;
+      }
+
+      const token = await user.getIdToken();
+
+      const res = await fetch(`${API_URL}/api/posts/like`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        console.log("Post liked:", data);
+      } else {
+        console.error("Failed to like post:", data.error);
+      }
+    } catch (error) {
+      console.log("Error liking post", error);
+    }
   }
 
   return (
@@ -75,6 +131,19 @@ export default function Home() {
           </button>
         </div>
       </div>
+      {posts.map((post) => (
+          <Post
+            key={post.id}
+            id={post.id}
+            userId={post.userId}
+            userFullName={post.userFullName}
+            text={post.text}
+            mediaUrl={post.mediaUrl}
+            createdAt={post.createdAt}
+            likes={post.likes}
+            commentsCount={post.commentsCount}
+          />
+        ))}
     </main>
     {newPost && (
       <NewPostPopUp handlePopUp={handlePopUp} />
