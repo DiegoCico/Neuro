@@ -3,7 +3,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, Navigate, Link } from "react-router-dom";
 import Header from "../components/Header";
 import "../css/ProfilePage.css";
-import { fetchMe, fetchUserBySlug, type ProfileData } from "../userProfile";
+import {
+  fetchMe,
+  fetchUserBySlug,
+  followBySlug,
+  unfollowBySlug,
+  type ProfileData,
+} from "../userProfile";
 
 /* ---------- slug utils ---------- */
 function kebabName(first?: string, last?: string) {
@@ -21,7 +27,7 @@ function makeProfileSlug(first?: string, last?: string) {
 /* ---------- avatar ---------- */
 function AvatarCircle({ name, src, size = 80 }: { name: string; src?: string; size?: number }) {
   const initials = useMemo(() => {
-    const parts = name.trim().split(/\s+/);
+    const parts = (name || "").trim().split(/\s+/);
     return (parts[0]?.[0] || "U") + (parts[1]?.[0] || "");
   }, [name]);
 
@@ -34,33 +40,87 @@ function AvatarCircle({ name, src, size = 80 }: { name: string; src?: string; si
   );
 }
 
+/* ---------- follow toggle ---------- */
+function FollowToggle({
+  slug,
+  isFollowing,
+  setIsFollowing,
+  followersCount,
+  setFollowersCount,
+  onNeedAuth,
+}: {
+  slug: string;
+  isFollowing: boolean | null;
+  setIsFollowing: (v: boolean) => void;
+  followersCount: number;
+  setFollowersCount: (n: number) => void;
+  onNeedAuth?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function handleClick() {
+    if (busy) return;
+    if (isFollowing === null) {
+      onNeedAuth?.();
+      return;
+    }
+    setBusy(true);
+    try {
+      if (isFollowing) {
+        setIsFollowing(false);
+        setFollowersCount(Math.max(0, followersCount - 1));
+        const res = await unfollowBySlug(slug);
+        setIsFollowing(res.isFollowing);
+        setFollowersCount(res.followersCount);
+      } else {
+        setIsFollowing(true);
+        setFollowersCount(followersCount + 1);
+        const res = await followBySlug(slug);
+        setIsFollowing(res.isFollowing);
+        setFollowersCount(res.followersCount);
+      }
+    } catch {
+      alert("Sorry, that didn’t work. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const label = isFollowing ? "Unfollow" : "Follow";
+  const cls = isFollowing ? "vp-btn" : "vp-btn primary";
+
+  return (
+    <button className={cls} onClick={handleClick} disabled={busy}>
+      {busy ? "…" : label}
+    </button>
+  );
+}
+
 /* ---------- page ---------- */
 export default function ProfilePage() {
   const { slug } = useParams<{ slug?: string }>();
   const navigate = useNavigate();
 
-  const [viewer, setViewer] = useState<ProfileData | null>(null);   // "me"
-  const [profile, setProfile] = useState<ProfileData | null>(null); // profile being viewed
+  const [viewer, setViewer] = useState<ProfileData | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
+  const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
+  const [followersCount, setFollowersCount] = useState<number>(0);
+
   useEffect(() => {
     let alive = true;
-
     (async () => {
       setLoading(true);
       setAuthRequired(false);
       setNotFound(false);
-
       try {
-        // Try to get the logged-in viewer (ok if fails when viewing others)
         const me = await fetchMe().catch(() => null);
         if (alive) setViewer(me);
-
         if (slug) {
-          // Viewing someone by slug
           try {
             const u = await fetchUserBySlug(slug.toLowerCase());
             if (alive) setProfile(u);
@@ -68,7 +128,6 @@ export default function ProfilePage() {
             if (alive) setNotFound(true);
           }
         } else {
-          // No slug -> this route should show "me" (or bounce to /auth)
           if (!me) {
             if (alive) setAuthRequired(true);
           } else {
@@ -79,13 +138,32 @@ export default function ProfilePage() {
         if (alive) setLoading(false);
       }
     })();
-
     return () => {
       alive = false;
     };
   }, [slug]);
 
-  // Loading state
+  /* init follow state (must be above returns) */
+  useEffect(() => {
+    if (!profile) {
+      setFollowersCount(0);
+      setIsFollowing(null);
+      return;
+    }
+    const initFollowers =
+      (profile as any).followersCount ??
+      (profile.stats?.followers ?? 0);
+    setFollowersCount(typeof initFollowers === "number" ? initFollowers : 0);
+
+    const followingList: string[] = (viewer as any)?.following ?? [];
+    const targetId: string | undefined = (profile as any).id;
+    if (viewer && targetId) {
+      setIsFollowing(Array.isArray(followingList) ? followingList.includes(targetId) : false);
+    } else {
+      setIsFollowing(null); // null => viewer unknown/unauthenticated
+    }
+  }, [viewer, profile]);
+
   if (loading) {
     return (
       <>
@@ -97,10 +175,8 @@ export default function ProfilePage() {
     );
   }
 
-  // Not logged in when trying to view /profile
   if (authRequired) return <Navigate to="/auth" replace />;
 
-  // Slug not found -> show 404 UI (don’t send to /auth)
   if (notFound) {
     return (
       <>
@@ -120,33 +196,32 @@ export default function ProfilePage() {
     );
   }
 
-  // If for some reason profile is still missing here, protect by sending to /auth
   if (!profile) return <Navigate to="/auth" replace />;
 
   const fullName =
     profile.fullName ||
     [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
-    profile.firstName;
+    (profile.firstName ?? "User");
 
   const profileSlug = makeProfileSlug(profile.firstName, profile.lastName);
-  const viewerSlug = viewer ? makeProfileSlug(viewer.firstName, viewer.lastName) : null;
-  const isMine = Boolean(viewer && viewerSlug === profileSlug);
 
-  const stats = profile.stats || { followers: 0, views: 0 }; // exactly TWO boxes
+  /* CRITICAL FIX: decide "isMine" by ID, not slug/names */
+  const viewerId = (viewer as any)?.id ?? null;
+  const profileId = (profile as any)?.id ?? null;
+  const isMine = Boolean(viewerId && profileId && viewerId === profileId);
+
+  const initialViews = profile.stats?.views ?? 0;
 
   return (
     <>
       <Header onSearch={() => {}} />
 
       <main className="vp-root">
-        {/* top cover */}
         <section className="vp-cover">
           <div className="vp-cover-gradient" />
         </section>
 
-        {/* 2-col shell */}
         <section className="vp-shell">
-          {/* Left: sticky sidebar card */}
           <aside className="vp-aside">
             <div className="vp-aside-card">
               <div className="vp-aside-head">
@@ -161,11 +236,11 @@ export default function ProfilePage() {
 
               <div className="vp-aside-stats">
                 <div className="vp-aside-stat">
-                  <div className="vp-aside-num">{stats.followers.toLocaleString()}</div>
+                  <div className="vp-aside-num">{followersCount.toLocaleString()}</div>
                   <div className="vp-aside-label">Followers</div>
                 </div>
                 <div className="vp-aside-stat">
-                  <div className="vp-aside-num">{stats.views.toLocaleString()}</div>
+                  <div className="vp-aside-num">{initialViews.toLocaleString()}</div>
                   <div className="vp-aside-label">Views</div>
                 </div>
               </div>
@@ -192,9 +267,14 @@ export default function ProfilePage() {
                   </>
                 ) : (
                   <>
-                    <button className="vp-btn primary" onClick={() => alert("Connect sent")}>
-                      Connect
-                    </button>
+                    <FollowToggle
+                      slug={profileSlug}
+                      isFollowing={isFollowing}
+                      setIsFollowing={setIsFollowing}
+                      followersCount={followersCount}
+                      setFollowersCount={setFollowersCount}
+                      onNeedAuth={() => navigate("/auth")}
+                    />
                     <button className="vp-btn" onClick={() => alert("Message opened")}>
                       Message
                     </button>
@@ -216,7 +296,6 @@ export default function ProfilePage() {
             </div>
           </aside>
 
-          {/* Right: content */}
           <section className="vp-main">
             <h1 className="vp-hero-title">Builder of scalable systems and clean UIs</h1>
             {profile.bio ? (
@@ -231,9 +310,9 @@ export default function ProfilePage() {
             <div className="vp-section">
               <h2 className="vp-h2">Current Focus</h2>
               <p className="vp-copy">
-                Currently working on GenAI contract pipeline optimization using Bedrock, Glue, S3, and DynamoDB.
-                I&apos;ve successfully cut ETL latency by 50% across multi-million row datasets while maintaining data
-                integrity and system reliability.
+                Currently working on GenAI contract pipeline optimization using Bedrock, Glue, S3, and DynamoDB. I&apos;ve
+                successfully cut ETL latency by 50% across multi-million row datasets while maintaining data integrity
+                and system reliability.
               </p>
             </div>
 
@@ -259,8 +338,8 @@ export default function ProfilePage() {
               <div className="vp-highlight">
                 <div className="vp-highlight-title">Multi-Million Row ETL</div>
                 <div className="vp-highlight-sub">
-                  Designed efficient data transformation processes handling massive datasets while maintaining
-                  sub-second query response times.
+                  Designed efficient data transformation processes handling massive datasets while maintaining sub-second
+                  query response times.
                 </div>
               </div>
 
@@ -279,7 +358,7 @@ export default function ProfilePage() {
   );
 }
 
-/** /profile -> /u/<slug> */
+/* ---------- redirect helper ---------- */
 export function RedirectToMyProfile() {
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
