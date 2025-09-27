@@ -124,7 +124,9 @@ export default function FaceSetup() {
                             if (webCamRef.current) {
                                 const imageSrc = webCamRef.current.getScreenshot()
                                 if (imageSrc) {
-                                setFrames((prevFrames) => [...prevFrames, { pose, image: imageSrc }])
+                                    const newFrame = { pose, image: imageSrc }
+                                    setFrames(prev => [...prev, newFrame])
+                                    framesRef.current = [...framesRef.current, newFrame]
                                 }
                             }
 
@@ -212,31 +214,27 @@ export default function FaceSetup() {
                 />
 
                 <svg className="circle-overlay" viewBox="0 0 450 450">
-                    {/* Background ring */}
-                    <circle
-                        cx="225"
-                        cy="225"
-                        r="210"
-                        stroke="gray"
-                        strokeWidth="8"
-                        fill="none"
-                    />
-                    {/* Progress ring */}
-                    <circle
-                        cx="225"
-                        cy="225"
-                        r="210"
-                        stroke="limegreen"
-                        strokeWidth="8"
-                        fill="none"
-                        strokeDasharray={2 * Math.PI * 210}
-                        strokeDashoffset={
-                        2 * Math.PI * 210 - (2 * Math.PI * 210 * progress) / 100
-                        }
-                        strokeLinecap="round"
-                        transform="rotate(-90 225 225)"
-                    />
-                </svg>
+  <circle
+    cx="225"
+    cy="225"
+    r="210"
+    className="bg-ring"
+    strokeWidth="8"
+    fill="none"
+  />
+  <circle
+    cx="225"
+    cy="225"
+    r="210"
+    className="progress-ring"
+    strokeWidth="8"
+    fill="none"
+    strokeDasharray={2 * Math.PI * 210}
+    strokeDashoffset={2 * Math.PI * 210 - (2 * Math.PI * 210 * progress) / 100}
+    strokeLinecap="round"
+    transform="rotate(-90 225 225)"
+  />
+</svg>
             </div>
 
             {/* Controls */}
