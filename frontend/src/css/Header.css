@@ -148,3 +148,43 @@ html[data-theme="light"] {
 .search-meta{ display:flex; flex-direction:column; line-height:1.2; }
 .search-name{ font-weight:600; color: var(--text); }
 .search-sub{ font-size:12px; opacity:.7; color: var(--text); }
+
+.dropdown-wrap {
+  position: relative;
+}
+.dropdown-wrap .search-pop {
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+}
+
+.dropdown-wrap {
+  position: relative;
+}
+
+.dropdown-pop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--surface, #fff);
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  min-width: 160px;
+  z-index: 1000;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: var(--hover, #f5f5f5);
+}

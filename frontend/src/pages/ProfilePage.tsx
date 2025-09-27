@@ -1,5 +1,5 @@
 // src/pages/ProfilePage.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useNavigate, useParams, Navigate, Link } from "react-router-dom";
 import Header from "../components/Header";
 import "../css/ProfilePage.css";
@@ -7,10 +7,14 @@ import {
   fetchMe,
   fetchUserBySlug,
   followBySlug,
+  fetchExperienceBySlug,
   unfollowBySlug,
   type ProfileData,
   type FollowersDetail,
 } from "../userProfile";
+
+// Lazy-load Experience so it only bundles & fetches after user clicks the tab
+const ExperienceSection = lazy(() => import("../components/ExperienceSection"));
 
 /* ---------- slug utils ---------- */
 function kebabName(first?: string, last?: string) {
@@ -117,6 +121,17 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState<number>(0);
   const [followersDetails, setFollowersDetails] = useState<FollowersDetail[]>([]);
 
+  const [title, setTitle] = useState('')
+  const [bio, setBio] = useState('')
+  const [currentFocus, setCurrentFocus] = useState('')
+  const [beyondWork, setBeyondWork] = useState('')
+
+  const [saved, setSaved] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  // Tabs: render Experience only when tab === "Experience"
+  const [tab, setTab] = useState<"About" | "Activity" | "Experience" | "Projects">("About");
+
   // Initial load: fetch viewer & target profile
   useEffect(() => {
     let alive = true;
@@ -131,7 +146,9 @@ export default function ProfilePage() {
         if (slug) {
           try {
             const u = await fetchUserBySlug(slug.toLowerCase());
+            const exp = await fetchExperienceBySlug(slug.toLowerCase())
             if (alive) setProfile(u);
+            console.log(exp)
           } catch {
             if (alive) setNotFound(true);
           }
@@ -151,7 +168,7 @@ export default function ProfilePage() {
     };
   }, [slug]);
 
-  // Initialize follow-related UI state whenever viewer/profile changes (must be above returns)
+  // Initialize follow-related UI state whenever viewer/profile changes
   useEffect(() => {
     if (!profile) {
       setFollowersCount(0);
@@ -160,21 +177,17 @@ export default function ProfilePage() {
       return;
     }
 
-    // followersCount prefers the denormalized field; fallback to stats.followers
-    const initFollowers =
-      (profile.followersCount ?? profile.stats?.followers ?? 0) || 0;
+    const initFollowers = (profile.followersCount ?? profile.stats?.followers ?? 0) || 0;
     setFollowersCount(initFollowers);
 
-    // followersDetails array (optional)
     setFollowersDetails(Array.isArray(profile.followersDetails) ? profile.followersDetails : []);
 
-    // isFollowing derived from viewer.following if available; null when no viewer
     const followingList: string[] = (viewer?.following as string[] | undefined) ?? [];
     const targetId: string | undefined = profile.id;
     if (viewer && targetId) {
       setIsFollowing(Array.isArray(followingList) ? followingList.includes(targetId) : false);
     } else {
-      setIsFollowing(null); // unauthenticated -> show Follow but redirect to /auth on click
+      setIsFollowing(null);
     }
   }, [viewer, profile]);
 
@@ -231,14 +244,13 @@ export default function ProfilePage() {
   // Optional: reconcile followers list when server returns a count that differs (refetch lightweight)
   async function reconcileFollowersIfNeeded(serverCount: number) {
     if (!slug) return;
-    // If list length differs from server count, refresh the target user to get updated followersDetails
     if (serverCount !== followersDetails.length) {
       try {
         const u = await fetchUserBySlug(profileSlug);
         setFollowersDetails(Array.isArray(u.followersDetails) ? u.followersDetails : []);
         setFollowersCount(u.followersCount ?? u.stats?.followers ?? serverCount);
       } catch {
-        // ignore silent
+        // ignore
       }
     }
   }
@@ -317,7 +329,7 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Followers preview (uses followersDetails from backend) */}
+              {/* Followers preview */}
               {followersDetails.length > 0 && (
                 <div className="vp-aside-followers">
                   <div className="vp-aside-sub" style={{ marginBottom: 6 }}>Recent followers</div>
@@ -327,7 +339,6 @@ export default function ProfilePage() {
                       return (
                         <li key={f.uid} className="vp-follower-row">
                           <div className="vp-follower-avatar" aria-hidden>
-                            {/* simple circle with initials */}
                             <div className="vp-avatar small">
                               {(f.fullName?.[0] || "U").toUpperCase()}
                             </div>
@@ -347,11 +358,32 @@ export default function ProfilePage() {
                 </div>
               )}
 
+              {/* Tabs */}
               <nav className="vp-aside-nav" aria-label="Profile sections">
-                <button className="vp-aside-link is-active">About</button>
-                <button className="vp-aside-link">Activity</button>
-                <button className="vp-aside-link">Experience</button>
-                <button className="vp-aside-link">Projects</button>
+                <button
+                  className={`vp-aside-link ${tab === "About" ? "is-active" : ""}`}
+                  onClick={() => setTab("About")}
+                >
+                  About
+                </button>
+                <button
+                  className={`vp-aside-link ${tab === "Activity" ? "is-active" : ""}`}
+                  onClick={() => setTab("Activity")}
+                >
+                  Activity
+                </button>
+                <button
+                  className={`vp-aside-link ${tab === "Experience" ? "is-active" : ""}`}
+                  onClick={() => setTab("Experience")}
+                >
+                  Experience
+                </button>
+                <button
+                  className={`vp-aside-link ${tab === "Projects" ? "is-active" : ""}`}
+                  onClick={() => setTab("Projects")}
+                >
+                  Projects
+                </button>
               </nav>
 
               <div className="vp-aside-links">
@@ -363,60 +395,171 @@ export default function ProfilePage() {
 
           {/* Right: content */}
           <section className="vp-main">
-            <h1 className="vp-hero-title">Builder of scalable systems and clean UIs</h1>
-            {profile.bio ? (
-              <p className="vp-hero-sub">{profile.bio}</p>
-            ) : (
-              <p className="vp-hero-sub">
-                I like shipping fast, validating with users, and polishing the edges. My interests span GenAI × Data,
-                product velocity, and developer experience.
-              </p>
+            {tab === "About" && (
+              <>
+                <h1
+                  className="vp-hero-title"
+                  contentEditable
+                  suppressContentEditableWarning
+                  onFocus={(e) => {
+                    if (!title) e.currentTarget.textContent = "";
+                  }}
+                  onBlur={(e) => {
+                    const val = e.currentTarget.textContent?.trim() || "";
+                    setTitle(val);
+                    setDirty(true)
+                    if (!val) e.currentTarget.textContent = "Add your title...";
+                  }}
+                >
+                  {title || "Add your title..."}
+                </h1>
+
+                <p
+                  className="vp-hero-sub editable"
+                  contentEditable
+                  suppressContentEditableWarning
+                  onFocus={(e) => {
+                    if (!bio) e.currentTarget.textContent = "";
+                  }}
+                  onBlur={(e) => {
+                    const val = e.currentTarget.textContent?.trim() || "";
+                    setBio(val);
+                    if (!val) e.currentTarget.textContent = "Add your bio...";
+                  }}
+                >
+                  {bio || "Add your bio..."}
+                </p>
+
+                <div className="vp-section">
+                  <h2 className="vp-h2">Current Focus</h2>
+                  <p
+                    className="vp-copy editable"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onFocus={(e) => {
+                      if (!currentFocus) e.currentTarget.textContent = "";
+                    }}
+                    onBlur={(e) => {
+                      const val = e.currentTarget.textContent?.trim() || "";
+                      setCurrentFocus(val);
+                      if (!val) e.currentTarget.textContent = "Add your current focus...";
+                    }}
+                  >
+                    {currentFocus || "Add your current focus..."}
+                  </p>
+                </div>
+
+                <div className="vp-section">
+                  <h2 className="vp-h2">Beyond Work</h2>
+                  <p
+                    className="vp-copy editable"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onFocus={(e) => {
+                      if (!beyondWork) e.currentTarget.textContent = "";
+                    }}
+                    onBlur={(e) => {
+                      const val = e.currentTarget.textContent?.trim() || "";
+                      setBeyondWork(val);
+                      if (!val) e.currentTarget.textContent = "Add your beyond work...";
+                    }}
+                  >
+                    {beyondWork || "Add your beyond work..."}
+                  </p>
+                </div>
+
+                <div className="vp-section">
+                  <h2 className="vp-h2">Recent Highlights</h2>
+
+                  <div className="vp-highlight">
+                    <div className="vp-highlight-title">GenAI Pipeline Optimization</div>
+                    <div className="vp-highlight-sub">
+                      Architected and implemented a scalable contract processing pipeline using AWS services, reducing
+                      processing time by 50% and improving system reliability.
+                    </div>
+                  </div>
+
+                  <div className="vp-highlight">
+                    <div className="vp-highlight-title">Multi-Million Row ETL</div>
+                    <div className="vp-highlight-sub">
+                      Designed efficient data transformation processes handling massive datasets while maintaining sub-second
+                      query response times.
+                    </div>
+                  </div>
+
+                  <div className="vp-highlight">
+                    <div className="vp-highlight-title">UI/UX Innovation</div>
+                    <div className="vp-highlight-sub">
+                      Regular hackathon participant focused on creating intuitive interfaces that bridge the gap between
+                      complex backend systems and user-friendly experiences.
+                    </div>
+                  </div>
+                </div>
+
+                {dirty && !saved && (
+                  <div style={{ marginTop: "1rem" }}>
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        console.log({
+                          title,
+                          bio,
+                          currentFocus,
+                          beyondWork,
+                        });
+                        setSaved(true);
+                        setDirty(false); // clear dirty since it's saved
+                        setTimeout(() => setSaved(false), 3000);
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+
+                {/* Show confirmation button after save */}
+                {saved && (
+                  <div style={{ marginTop: "1rem" }}>
+                    <button className="primary" disabled>
+                      Profile updated
+                    </button>
+                  </div>
+                )}
+              </>
             )}
 
-            <div className="vp-section">
-              <h2 className="vp-h2">Current Focus</h2>
-              <p className="vp-copy">
-                Currently working on GenAI contract pipeline optimization using Bedrock, Glue, S3, and DynamoDB. I&apos;ve
-                successfully cut ETL latency by 50% across multi-million row datasets while maintaining data integrity
-                and system reliability.
-              </p>
-            </div>
-
-            <div className="vp-section">
-              <h2 className="vp-h2">Beyond Work</h2>
-              <p className="vp-copy">
-                Hackathon regular, UI/UX enthusiast, and coffee fueled. I enjoy exploring the intersection of design and
-                engineering, always looking for ways to create more intuitive and performant user experiences.
-              </p>
-            </div>
-
-            <div className="vp-section">
-              <h2 className="vp-h2">Recent Highlights</h2>
-
-              <div className="vp-highlight">
-                <div className="vp-highlight-title">GenAI Pipeline Optimization</div>
-                <div className="vp-highlight-sub">
-                  Architected and implemented a scalable contract processing pipeline using AWS services, reducing
-                  processing time by 50% and improving system reliability.
-                </div>
+            {tab === "Activity" && (
+              <div className="vp-section">
+                <h2 className="vp-h2">Activity</h2>
+                <p className="vp-copy">Coming soon.</p>
               </div>
+            )}
 
-              <div className="vp-highlight">
-                <div className="vp-highlight-title">Multi-Million Row ETL</div>
-                <div className="vp-highlight-sub">
-                  Designed efficient data transformation processes handling massive datasets while maintaining sub-second
-                  query response times.
-                </div>
-              </div>
+            {tab === "Experience" && (
+              <Suspense
+                fallback={
+                    <div className="vp-section">
+                      <h2 className="vp-h2">Experience</h2>
+                      <div className="vp-skel-line" style={{ width: "60%" }} />
+                      <div className="vp-skel-line" style={{ width: "50%" }} />
+                      <div className="vp-skel-line" style={{ width: "40%" }} />
+                    </div>
+                }
+              >
+                <ExperienceSection
+                    profileSlug={profileSlug}
+                    isMine={isMine}
+                  />
 
-              <div className="vp-highlight">
-                <div className="vp-highlight-title">UI/UX Innovation</div>
-                <div className="vp-highlight-sub">
-                  Regular hackathon participant focused on creating intuitive interfaces that bridge the gap between
-                  complex backend systems and user-friendly experiences.
-                </div>
+              </Suspense>
+            )}
+
+            {tab === "Projects" && (
+              <div className="vp-section">
+                <h2 className="vp-h2">Projects</h2>
+                <p className="vp-copy">Coming soon.</p>
               </div>
-            </div>
+            )}
           </section>
         </section>
       </main>

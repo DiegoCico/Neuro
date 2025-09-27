@@ -193,3 +193,75 @@ body:has(.header) .vp-root { padding-top: clamp(16px, 3vh, 28px); }
 /* subtle entrance */
 .vp-aside-card, .vp-main, .vp-cover { animation: vp-fade-in .18s ease-out both; }
 @keyframes vp-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* === Backdrop keeps it a true centered POPUP === */
+.vp-modal-backdrop{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.5);
+  display:grid; place-items:center;
+  z-index: 1000;              /* ensure on top of app */
+  touch-action: none;         /* iOS: prevent background gesture scrolls */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* modal container becomes a flex column */
+.vp-modal{
+  width:min(760px, 92vw);
+  max-height:min(88vh, 1000px);
+  display:flex;
+  flex-direction:column;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);
+  overflow:hidden;            /* clip inner scrollbar to radius */
+}
+
+/* header stays fixed at top */
+.vp-modal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px; padding:14px 16px;
+  border-bottom:1px solid var(--border);
+  flex:0 0 auto;
+}
+
+/* body expands, and scrolls internally */
+.vp-modal-body{
+  flex:1 1 auto;              /* grows to fill */
+  min-height:0;               /* KEY for nested scroll in flex */
+  overflow:auto;              /* enables scrolling INSIDE the popup */
+  padding:16px;
+  -webkit-overflow-scrolling: touch; /* smooth iOS scroll */
+  overscroll-behavior: contain;      /* prevent scroll chaining */
+  touch-action: pan-y;               /* allow vertical scroll inside */
+}
+
+/* optional: slightly larger on small screens */
+@media (max-width: 560px){
+  .vp-modal{
+    width:94vw;
+    max-height:92vh;
+  }
+}
+
+/* Keep your existing form styles (unchanged) */
+.vp-icon-btn{ border:1px solid var(--border); background:var(--surface); border-radius:10px; padding:6px 10px; }
+.vp-form{ display:block; }
+.vp-field{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+.vp-field.checkbox{ flex-direction:row; align-items:center; gap:8px; margin-top:26px; }
+.vp-input,.vp-textarea{ width:100%; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); padding:10px 12px; outline:none; }
+.vp-textarea{ resize:vertical; }
+.vp-grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.vp-grid3{ display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; }
+.vp-modal-foot{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; padding: 12px 16px; border-top:1px solid var(--border); }
+.vp-alert{ border:1px solid #c43; background:#c43a; color:#300; padding:10px 12px; border-radius:10px; margin-bottom:12px; }
+.vp-section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.vp-section-actions{ display:flex; gap:8px; }
+
+/* Optional: nicer thin scrollbar inside the modal body */
+.vp-modal-body::-webkit-scrollbar { width: 10px; }
+.vp-modal-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+.vp-modal-body { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }

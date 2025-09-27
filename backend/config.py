@@ -126,6 +126,55 @@ def enroll_face():
     result = save_face_enrollment(uid, frames)
     return jsonify(result), (200 if result.get("ok") else 400)
 
+@app.get("/api/users/<slug>/experience")
+def api_list_experience(slug: str):
+    try:
+        items = profiles.list_experience_for_slug(slug.lower().strip())
+        return jsonify({"ok": True, "items": items})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    
+@app.post("/api/me/experience")
+def api_add_my_experience():
+    authz = request.headers.get("Authorization")
+    payload = request.get_json(silent=True) or {}
+
+    res = profiles.add_my_experience(authz, payload)
+    if not res.get("ok"):
+        # map auth vs validation errors to useful HTTP codes
+        err = (res.get("error") or "").lower()
+        if "unauthorized" in err:
+            return jsonify(res), 401
+        return jsonify(res), 400
+
+    return jsonify(res), 200
+
+@app.put("/api/me/experience/<exp_id>")
+@app.patch("/api/me/experience/<exp_id>")
+def api_update_my_experience(exp_id: str):
+    authz = request.headers.get("Authorization")
+    uid = profiles.verify_bearer_uid(authz)
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    payload = request.get_json(silent=True) or {}
+    clean, err = profiles._validate_and_canonicalize_experience_input(payload)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    item = profiles.upsert_experience(uid, dict(clean or {}), exp_id=exp_id)
+    if "skills" in item and "technologies" not in item:
+        item["technologies"] = list(item.get("skills") or [])
+    return jsonify({"ok": True, "item": item})
+
+@app.delete("/api/me/experience/<exp_id>")
+def api_delete_my_experience(exp_id: str):
+    authz = request.headers.get("Authorization")
+    uid = profiles.verify_bearer_uid(authz)
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    ref = profiles._experience_collection(uid).document(exp_id)
+    ref.delete()
+    return jsonify({"ok": True})
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

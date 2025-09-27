@@ -9,6 +9,11 @@ import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from google.cloud.firestore_v1 import Transaction
 
+from datetime import datetime
+from typing import TypedDict, List, Optional, Dict, Any
+from typing import cast
+
+
 # ------------------------------------------------------------
 # Firebase / Firestore init
 # ------------------------------------------------------------
@@ -402,3 +407,196 @@ def ensure_user_slug(uid: str, user: Dict[str, Any]) -> Dict[str, Any]:
         _get_user_doc(uid).update({"slug": s})
         user["slug"] = s
     return user
+
+class Experience(TypedDict, total=False):
+    id: str
+    title: str
+    company: str
+    employmentType: str
+    location: str
+    startDate: str     # ISO yyyy-mm (or yyyy-mm-dd; stored as yyyy-mm)
+    endDate: str       # ISO yyyy-mm (or yyyy-mm-dd; stored as yyyy-mm)
+    current: bool
+    description: str
+    skills: List[str]          # NEW canonical
+    technologies: List[str]    # deprecated (read-only compat if old data exists)
+    logoUrl: str
+    createdAt: str
+    updatedAt: str
+
+# --- add these helpers somewhere below the Experience type ---
+
+def _normalize_month(s: Optional[str]) -> Optional[str]:
+    """
+    Accepts 'YYYY-MM' or 'YYYY-MM-DD' and returns 'YYYY-MM'.
+    Returns None if input is falsy or malformed.
+    """
+    if not s:
+        return None
+    s = str(s).strip()
+    # simple sanity checks
+    if len(s) >= 7 and s[4] == "-" and s[0:4].isdigit() and s[5:7].isdigit():
+        return s[:7]
+    return None
+
+def _normalize_str_list(val: Any) -> List[str]:
+    """
+    Accepts list[str] or comma/newline-separated string and returns a clean list[str].
+    """
+    if val is None:
+        return []
+    if isinstance(val, list):
+        out = [str(x).strip() for x in val if str(x).strip()]
+        return out[:20]
+    s = str(val)
+    parts = re.split(r"[\n,]", s)
+    out = [p.strip() for p in parts if p.strip()]
+    return out[:20]
+
+def _validate_and_canonicalize_experience_input(data: Dict[str, Any]) -> Tuple[Optional[Experience], Optional[str]]:
+    """
+    Validates client payload for creating/updating an experience.
+    Returns (clean_experience_dict, error_message or None).
+    - Required: title, company, startDate
+    - Must provide endDate unless current=True
+    - Stores dates as 'YYYY-MM'
+    - Uses 'skills' as canonical; falls back to 'technologies' if provided
+    """
+    if not isinstance(data, dict):
+        return None, "Invalid payload"
+
+    title = str(data.get("title", "")).strip()
+    company = str(data.get("company", "")).strip()
+    start_raw = data.get("startDate")
+    end_raw = data.get("endDate")
+    current = bool(data.get("current", False))
+
+    if not title or not company:
+        return None, "Title and company are required."
+
+    startDate = _normalize_month(start_raw)
+    if not startDate:
+        return None, "startDate must be 'YYYY-MM' (or 'YYYY-MM-DD')."
+
+    endDate = _normalize_month(end_raw) if not current else None
+    if not current and not endDate:
+        return None, "Either set current=true or provide a valid endDate ('YYYY-MM' or 'YYYY-MM-DD')."
+
+    employmentType = str(data.get("employmentType", "")).strip() or None
+    location = str(data.get("location", "")).strip() or None
+    description = str(data.get("description", "")).strip() or None
+    logoUrl = str(data.get("logoUrl", "")).strip() or None
+
+    # Canonical skills; accept legacy 'technologies' for compatibility
+    skills = _normalize_str_list(
+        data.get("skills", data.get("technologies"))
+    )
+
+    clean: Experience = {
+        "title": title,
+        "company": company,
+        "startDate": startDate,
+        "current": current,
+    }
+    if employmentType: clean["employmentType"] = employmentType
+    if location:       clean["location"] = location
+    if endDate:        clean["endDate"] = endDate
+    if description:    clean["description"] = description
+    if logoUrl:        clean["logoUrl"] = logoUrl
+    if skills:         clean["skills"] = skills
+
+    return clean, None
+
+def add_my_experience(authorization_header: Optional[str], payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a new experience under the authenticated user's 'users/{uid}/experience' subcollection.
+    - Verifies Firebase ID token from the provided Authorization header.
+    - Validates and normalizes the payload (no highlights/order; uses 'skills').
+    - Returns: { ok: True, item: Experience } on success; { ok: False, error: str } on failure.
+    """
+    uid = verify_bearer_uid(authorization_header)
+    if not uid:
+        return {"ok": False, "error": "unauthorized"}
+
+    clean, err = _validate_and_canonicalize_experience_input(payload or {})
+    if err:
+        return {"ok": False, "error": err}
+
+    try:
+        item = upsert_experience(uid, cast(Dict[str, Any], clean))
+        # Compatibility: if old readers expect 'technologies', mirror from skills in response only
+        if "skills" in item and "technologies" not in item:
+            item["technologies"] = list(item.get("skills") or [])
+        return {"ok": True, "item": item}
+    except Exception as e:
+        return {"ok": False, "error": f"failed to save experience: {e}"}
+
+
+
+def _experience_collection(uid: str):
+    return _get_user_doc(uid).collection("experience")
+
+
+def list_experience_for_uid(uid: str) -> List[Experience]:
+    """
+    Returns experience for a user, auto-ordered:
+      1. Current roles first (sorted by startDate desc)
+      2. Then past roles (sorted by endDate desc, fallback startDate desc)
+    """
+    docs = list(_experience_collection(uid).stream())
+    items: List[Experience] = []
+    for d in docs:
+        data = d.to_dict() or {}
+        data["id"] = d.id
+
+        # migrate legacy: map old technologies -> skills
+        if "skills" not in data and "technologies" in data:
+            data["skills"] = list(data.get("technologies") or [])
+
+        items.append(cast(Experience, data))
+
+    def sort_key(x: Dict[str, Any]):
+        current = bool(x.get("current"))
+        start = str(x.get("startDate") or "")
+        end = str(x.get("endDate") or "")
+
+        # current roles: rank highest, then sort by startDate
+        if current:
+            return (0, start)  # bucket 0 = current, sort by start desc later
+
+        # past roles: bucket 1, prefer endDate; if missing, fallback to startDate
+        key_date = end or start
+        return (1, key_date)
+
+    # sort by bucket, then date desc (reverse=True)
+    items.sort(key=sort_key, reverse=True)
+    return items
+
+
+
+def list_experience_for_slug(slug: str) -> List[Experience]:
+    u = get_user_by_slug(slug)
+    if not u:
+        return []
+    return list_experience_for_uid(u["id"])
+
+
+def upsert_experience(uid: str, data: Dict[str, Any], exp_id: Optional[str] = None) -> Experience:
+    """
+    Creates or updates a single experience row.
+    """
+    now = datetime.utcnow().isoformat()
+    col = _experience_collection(uid)
+    if exp_id:
+        ref = col.document(exp_id)
+        in_db = ref.get().to_dict() or {}
+        merged = {**in_db, **data, "updatedAt": now}
+        ref.set(merged, merge=True)
+        merged["id"] = exp_id
+        return merged  # type: ignore[return-value]
+    else:
+        doc_ref = col.document()
+        payload = {**data, "createdAt": now, "updatedAt": now}
+        doc_ref.set(payload)
+        payload["id"] = doc_ref.id
+        return payload  # type: ignore[return-value]

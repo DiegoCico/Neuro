@@ -20,19 +20,8 @@ export type ProfileData = {
   location?: string;
   avatarUrl?: string;
   bio?: string;
-
-  /** Optional slug (backend ensures it on /api/me) */
   slug?: string;
-
-  /** Existing stats shape used by the UI */
   stats?: { followers: number; views: number };
-
-  /**
-   * Optional fields denormalized by the backend.
-   * - followersCount is preferred by the UI when present.
-   * - following is useful on the *viewer* object for client-side isFollowing calc.
-   * - followersDetails is the array of follower entries (uid, fullName, slug)
-   */
   followersCount?: number;
   following?: string[];
   followersDetails?: FollowersDetail[];
@@ -41,6 +30,29 @@ export type ProfileData = {
 export type FollowResponse = {
   isFollowing: boolean;
   followersCount: number;
+};
+
+/** Experience items under users/{uid}/experience */
+export type Experience = {
+  id: string;
+  title: string;
+  company: string;
+  employmentType?: string;
+  location?: string;
+  startDate: string;   // "YYYY-MM" or "YYYY-MM-DD"
+  endDate?: string;
+  current?: boolean;
+  description?: string;
+
+  /** NEW canonical field */
+  skills?: string[];
+
+  /** Deprecated: kept for backward-compat reading only */
+  technologies?: string[];
+
+  logoUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 /* ---------------- helpers ---------------- */
@@ -76,6 +88,44 @@ export async function fetchUserBySlug(slug: string): Promise<ProfileData> {
   if (r.status === 404) throw new Error("User not found");
   if (!r.ok) throw new Error("Failed to fetch user");
   return r.json();
+}
+
+/** Normalize incoming experience items to always have `skills` populated */
+function normalizeExperienceItem(raw: any): Experience {
+  const skills: string[] | undefined =
+    Array.isArray(raw?.skills) ? raw.skills :
+    (Array.isArray(raw?.technologies) ? raw.technologies : undefined);
+
+  return {
+    id: String(raw.id),
+    title: raw.title,
+    company: raw.company,
+    employmentType: raw.employmentType ?? undefined,
+    location: raw.location ?? undefined,
+    startDate: raw.startDate,
+    endDate: raw.endDate ?? undefined,
+    current: raw.current ?? undefined,
+    description: raw.description ?? undefined,
+    skills,                             // canonical
+    technologies: raw.technologies,     // deprecated (read-only)
+    logoUrl: raw.logoUrl ?? undefined,
+    createdAt: raw.createdAt ?? undefined,
+    updatedAt: raw.updatedAt ?? undefined,
+  };
+}
+
+/** Fetch a user's experience by slug (reads users/{uid}/experience) */
+export async function fetchExperienceBySlug(slug: string): Promise<Experience[]> {
+  const normalized = slug.toLowerCase();
+  const headers = await authHeaders(); // optional auth ok
+  const r = await fetch(`${API}/api/users/${encodeURIComponent(normalized)}/experience`, {
+    headers,
+  });
+  if (r.status === 404) return []; // treat as no experience if user not found
+  if (!r.ok) throw new Error("Failed to fetch experience");
+  const data = await r.json();
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map(normalizeExperienceItem);
 }
 
 /* ---------------- mutations ---------------- */

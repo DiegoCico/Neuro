@@ -89,6 +89,19 @@ export default function Header({ onSearch }: Props) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const [networkOpen, setNetworkOpen] = useState(false)
+  const networkRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (networkRef.current && !networkRef.current.contains(e.target as Node)) {
+        setNetworkOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
   useEffect(() => {
     initThemeFromCache();
 
@@ -270,10 +283,45 @@ export default function Header({ onSearch }: Props) {
         </nav>
 
         <nav className="nav-links" aria-label="Secondary">
-          <button className="nav-link" type="button">
+          {/* <button className="nav-link" type="button">
             <IconPeople className="nav-ico" />
             <span>Network</span>
-          </button>
+          </button> */}
+          <div className="dropdown-wrap" ref={networkRef}>
+            <button
+              className="nav-link"
+              type="button"
+              onClick={() => setNetworkOpen((o) => !o)}
+            >
+              <IconPeople className="nav-ico" />
+              <span>Network</span>
+            </button>
+
+            {networkOpen && (
+              <div className="dropdown-pop" role="menu">
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setNetworkOpen(false);
+                    navigate("/live-connect");
+                  }}
+                >
+                  Live connect
+                </button>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setNetworkOpen(false);
+                    navigate("/your-network");
+                  }}
+                >
+                  Your network
+                </button>
+              </div>
+            )}
+          </div>
           <button className="nav-link" type="button">
             <IconBriefcase className="nav-ico" />
             <span>Jobs</span>
