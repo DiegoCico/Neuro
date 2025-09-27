@@ -88,7 +88,11 @@ def admin_upsert_user():
 
 @app.post("/api/enroll-face")
 def enroll_face():
-    pass
+    data = request.get_json()
+    user_id = data.get("user_id")
+    frames = data.get("frames", [])
+    
+    return {'message': 'enroll face request'}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

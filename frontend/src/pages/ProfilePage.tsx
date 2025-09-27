@@ -9,6 +9,7 @@ import {
   followBySlug,
   unfollowBySlug,
   type ProfileData,
+  type FollowersDetail,
 } from "../userProfile";
 
 /* ---------- slug utils ---------- */
@@ -48,13 +49,15 @@ function FollowToggle({
   followersCount,
   setFollowersCount,
   onNeedAuth,
+  onReconcileFollowers,
 }: {
   slug: string;
-  isFollowing: boolean | null;
+  isFollowing: boolean | null; // null => not authenticated yet
   setIsFollowing: (v: boolean) => void;
   followersCount: number;
   setFollowersCount: (n: number) => void;
   onNeedAuth?: () => void;
+  onReconcileFollowers?: (serverCount: number) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -72,12 +75,14 @@ function FollowToggle({
         const res = await unfollowBySlug(slug);
         setIsFollowing(res.isFollowing);
         setFollowersCount(res.followersCount);
+        onReconcileFollowers?.(res.followersCount);
       } else {
         setIsFollowing(true);
         setFollowersCount(followersCount + 1);
         const res = await followBySlug(slug);
         setIsFollowing(res.isFollowing);
         setFollowersCount(res.followersCount);
+        onReconcileFollowers?.(res.followersCount);
       }
     } catch {
       alert("Sorry, that didn’t work. Try again.");
@@ -110,7 +115,9 @@ export default function ProfilePage() {
 
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [followersCount, setFollowersCount] = useState<number>(0);
+  const [followersDetails, setFollowersDetails] = useState<FollowersDetail[]>([]);
 
+  // Initial load: fetch viewer & target profile
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -120,6 +127,7 @@ export default function ProfilePage() {
       try {
         const me = await fetchMe().catch(() => null);
         if (alive) setViewer(me);
+
         if (slug) {
           try {
             const u = await fetchUserBySlug(slug.toLowerCase());
@@ -143,27 +151,34 @@ export default function ProfilePage() {
     };
   }, [slug]);
 
-  /* init follow state (must be above returns) */
+  // Initialize follow-related UI state whenever viewer/profile changes (must be above returns)
   useEffect(() => {
     if (!profile) {
       setFollowersCount(0);
+      setFollowersDetails([]);
       setIsFollowing(null);
       return;
     }
-    const initFollowers =
-      (profile as any).followersCount ??
-      (profile.stats?.followers ?? 0);
-    setFollowersCount(typeof initFollowers === "number" ? initFollowers : 0);
 
-    const followingList: string[] = (viewer as any)?.following ?? [];
-    const targetId: string | undefined = (profile as any).id;
+    // followersCount prefers the denormalized field; fallback to stats.followers
+    const initFollowers =
+      (profile.followersCount ?? profile.stats?.followers ?? 0) || 0;
+    setFollowersCount(initFollowers);
+
+    // followersDetails array (optional)
+    setFollowersDetails(Array.isArray(profile.followersDetails) ? profile.followersDetails : []);
+
+    // isFollowing derived from viewer.following if available; null when no viewer
+    const followingList: string[] = (viewer?.following as string[] | undefined) ?? [];
+    const targetId: string | undefined = profile.id;
     if (viewer && targetId) {
       setIsFollowing(Array.isArray(followingList) ? followingList.includes(targetId) : false);
     } else {
-      setIsFollowing(null); // null => viewer unknown/unauthenticated
+      setIsFollowing(null); // unauthenticated -> show Follow but redirect to /auth on click
     }
   }, [viewer, profile]);
 
+  // Render branches
   if (loading) {
     return (
       <>
@@ -203,25 +218,44 @@ export default function ProfilePage() {
     [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
     (profile.firstName ?? "User");
 
-  const profileSlug = makeProfileSlug(profile.firstName, profile.lastName);
+  // Use backend slug if present; otherwise derive
+  const profileSlug = (profile.slug && profile.slug.trim().length > 0)
+    ? profile.slug.toLowerCase()
+    : makeProfileSlug(profile.firstName, profile.lastName);
 
-  /* CRITICAL FIX: decide "isMine" by ID, not slug/names */
-  const viewerId = (viewer as any)?.id ?? null;
-  const profileId = (profile as any)?.id ?? null;
-  const isMine = Boolean(viewerId && profileId && viewerId === profileId);
+  // Decide "mine" by id equality (robust vs name/slug collisions)
+  const isMine = Boolean(viewer?.id && profile?.id && viewer!.id === profile!.id);
 
   const initialViews = profile.stats?.views ?? 0;
+
+  // Optional: reconcile followers list when server returns a count that differs (refetch lightweight)
+  async function reconcileFollowersIfNeeded(serverCount: number) {
+    if (!slug) return;
+    // If list length differs from server count, refresh the target user to get updated followersDetails
+    if (serverCount !== followersDetails.length) {
+      try {
+        const u = await fetchUserBySlug(profileSlug);
+        setFollowersDetails(Array.isArray(u.followersDetails) ? u.followersDetails : []);
+        setFollowersCount(u.followersCount ?? u.stats?.followers ?? serverCount);
+      } catch {
+        // ignore silent
+      }
+    }
+  }
 
   return (
     <>
       <Header onSearch={() => {}} />
 
       <main className="vp-root">
+        {/* top cover */}
         <section className="vp-cover">
           <div className="vp-cover-gradient" />
         </section>
 
+        {/* 2-col shell */}
         <section className="vp-shell">
+          {/* Left: sticky sidebar card */}
           <aside className="vp-aside">
             <div className="vp-aside-card">
               <div className="vp-aside-head">
@@ -274,6 +308,7 @@ export default function ProfilePage() {
                       followersCount={followersCount}
                       setFollowersCount={setFollowersCount}
                       onNeedAuth={() => navigate("/auth")}
+                      onReconcileFollowers={reconcileFollowersIfNeeded}
                     />
                     <button className="vp-btn" onClick={() => alert("Message opened")}>
                       Message
@@ -281,6 +316,36 @@ export default function ProfilePage() {
                   </>
                 )}
               </div>
+
+              {/* Followers preview (uses followersDetails from backend) */}
+              {followersDetails.length > 0 && (
+                <div className="vp-aside-followers">
+                  <div className="vp-aside-sub" style={{ marginBottom: 6 }}>Recent followers</div>
+                  <ul className="vp-followers-list">
+                    {followersDetails.slice(0, 6).map((f) => {
+                      const link = f.slug ? `/u/${f.slug}` : undefined;
+                      return (
+                        <li key={f.uid} className="vp-follower-row">
+                          <div className="vp-follower-avatar" aria-hidden>
+                            {/* simple circle with initials */}
+                            <div className="vp-avatar small">
+                              {(f.fullName?.[0] || "U").toUpperCase()}
+                            </div>
+                          </div>
+                          <div className="vp-follower-name">
+                            {link ? <Link to={link}>{f.fullName}</Link> : f.fullName}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {followersCount > followersDetails.length && (
+                    <div className="vp-followers-more">
+                      and {followersCount - followersDetails.length} more…
+                    </div>
+                  )}
+                </div>
+              )}
 
               <nav className="vp-aside-nav" aria-label="Profile sections">
                 <button className="vp-aside-link is-active">About</button>
@@ -296,6 +361,7 @@ export default function ProfilePage() {
             </div>
           </aside>
 
+          {/* Right: content */}
           <section className="vp-main">
             <h1 className="vp-hero-title">Builder of scalable systems and clean UIs</h1>
             {profile.bio ? (
@@ -367,7 +433,9 @@ export function RedirectToMyProfile() {
     (async () => {
       try {
         const me = await fetchMe();
-        const slug = makeProfileSlug(me.firstName, me.lastName);
+        const slug = (me.slug && me.slug.trim().length > 0)
+          ? me.slug.toLowerCase()
+          : makeProfileSlug(me.firstName, me.lastName);
         navigate(`/u/${slug}`, { replace: true });
       } catch {
         navigate("/auth", { replace: true });

@@ -63,7 +63,6 @@ export default function Onboarding() {
         interests: interests
           ? interests.split(",").map((s) => s.trim()).filter(Boolean)
           : [],
-        stats: { followers: 0, views: 0 },             // ← ensures TWO stat boxes
         allowConnect,
         onboardingCompleted: true,
         createdAt: serverTimestamp(),

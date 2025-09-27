@@ -3,6 +3,7 @@ import Webcam from 'react-webcam'
 import '../css/FaceSetup.css'
 import { FaceMesh } from '@mediapipe/face_mesh'
 import { Camera } from '@mediapipe/camera_utils'
+import { API_URL } from '../config'
 
 // Landmarks to be used for face id
 // Nose tip (1) moves consistently relative to all other landmarks - good anchor.
@@ -105,11 +106,10 @@ export default function FaceSetup() {
 
                         if (updated[pose] >= threshold) {
                             setFacePoses((old) => {
-                            if (old[pose]) return old // already done
+                            if (old[pose]) return old
 
                             const newPoses = { ...old, [pose]: true }
 
-                            // ✅ capture frame once per pose
                             if (webCamRef.current) {
                                 const imageSrc = webCamRef.current.getScreenshot()
                                 if (imageSrc) {
@@ -117,11 +117,9 @@ export default function FaceSetup() {
                                 }
                             }
 
-                            // ✅ update progress with fresh state
                             const completedCount = Object.values(newPoses).filter(Boolean).length
                             setProgress(Math.min(completedCount * 20, 100))
 
-                            // ✅ check enrollment complete
                             if (Object.values(newPoses).every(Boolean)) {
                                 setIsEnrollmentComplete(true)
                                 stopEnrollment()
@@ -158,8 +156,25 @@ export default function FaceSetup() {
 
     const stopEnrollment = () => {
         setCapturing(false)
-        console.log("Captured frames:", frames.length)
-        //TODO: send frames to backend here
+        console.log("Captured frames:", frames.length) // LOG
+    }
+
+    const continueEnrollment = async() => {
+        setCapturing(false)
+
+        const payload = {
+            user_id: "user123",
+            frames: frames
+        }
+
+        const res = await fetch(`${API_URL}/api/enroll-face`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        })
+
+        const data = await res.json();
+        console.log("Enrollment response:", data);
     }
 
     const downloadFrames = () => {
@@ -224,7 +239,7 @@ export default function FaceSetup() {
                     </button>
                 )}
                 {isEnrollmentComplete && (
-                    <button onClick={() => console.log("TODO: send frames to backend")} className="btn start-btn">
+                    <button onClick={() => continueEnrollment()} className="btn start-btn">
                         Continue
                     </button>
                 )}

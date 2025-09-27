@@ -4,6 +4,12 @@ import { API_URL } from "./config";
 
 const API = API_URL;
 
+export type FollowersDetail = {
+  uid: string;
+  fullName: string;
+  slug?: string;
+};
+
 /** What the backend returns for a user profile */
 export type ProfileData = {
   id: string;
@@ -15,16 +21,21 @@ export type ProfileData = {
   avatarUrl?: string;
   bio?: string;
 
+  /** Optional slug (backend ensures it on /api/me) */
+  slug?: string;
+
   /** Existing stats shape used by the UI */
   stats?: { followers: number; views: number };
 
   /**
-   * Optional fields that may be present if your backend denormalizes them.
+   * Optional fields denormalized by the backend.
    * - followersCount is preferred by the UI when present.
    * - following is useful on the *viewer* object for client-side isFollowing calc.
+   * - followersDetails is the array of follower entries (uid, fullName, slug)
    */
   followersCount?: number;
   following?: string[];
+  followersDetails?: FollowersDetail[];
 };
 
 export type FollowResponse = {
@@ -60,7 +71,8 @@ export async function fetchMe(): Promise<ProfileData> {
 
 /** Fetch another user's profile by their slug (e.g., "diego-cicotoste") */
 export async function fetchUserBySlug(slug: string): Promise<ProfileData> {
-  const r = await fetch(`${API}/api/users/${encodeURIComponent(slug)}`);
+  const normalized = slug.toLowerCase();
+  const r = await fetch(`${API}/api/users/${encodeURIComponent(normalized)}`);
   if (r.status === 404) throw new Error("User not found");
   if (!r.ok) throw new Error("Failed to fetch user");
   return r.json();
@@ -70,7 +82,7 @@ export async function fetchUserBySlug(slug: string): Promise<ProfileData> {
 
 export async function followBySlug(slug: string): Promise<FollowResponse> {
   const headers = await authHeaders();
-  const r = await fetch(`${API}/api/users/${encodeURIComponent(slug)}/follow`, {
+  const r = await fetch(`${API}/api/users/${encodeURIComponent(slug.toLowerCase())}/follow`, {
     method: "POST",
     headers,
   });
@@ -80,7 +92,7 @@ export async function followBySlug(slug: string): Promise<FollowResponse> {
 
 export async function unfollowBySlug(slug: string): Promise<FollowResponse> {
   const headers = await authHeaders();
-  const r = await fetch(`${API}/api/users/${encodeURIComponent(slug)}/unfollow`, {
+  const r = await fetch(`${API}/api/users/${encodeURIComponent(slug.toLowerCase())}/unfollow`, {
     method: "POST",
     headers,
   });
