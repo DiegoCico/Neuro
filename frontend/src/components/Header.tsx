@@ -1,11 +1,12 @@
 // src/components/Header.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import NeuroLogo from "./NeuroLogo";
 import ProfileDropdown from "./ProfileDropdown";
 import { fetchMe, type ProfileData } from "../userProfile";
 import { initThemeFromCache /*, toggleTheme*/ } from "../utils/theme";
 import { getAuth, signOut } from "firebase/auth";
+import { API_URL } from "../config";
 import "../css/Header.css";
 import "../css/ProfileDropdown.css";
 
@@ -58,27 +59,7 @@ const IconChat = (p: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-/* ---------- Badged icon wrapper ---------- */
-function BadgedIcon({
-  children,
-  count,
-  label,
-}: {
-  children: React.ReactNode;
-  count?: number;
-  label: string;
-}) {
-  return (
-    <button className="icon-btn" aria-label={label} type="button">
-      {children}
-      {typeof count === "number" && count > 0 && (
-        <span className="badge" aria-hidden>
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
+type SearchItem = { id: string; fullName: string; slug: string; avatarUrl?: string | null };
 
 /* ---------- utils ---------- */
 function kebabName(first?: string, last?: string) {
@@ -91,7 +72,7 @@ function kebabName(first?: string, last?: string) {
 }
 
 /* ---------- Props ---------- */
-type Props = { onSearch: (q: string) => void };
+type Props = { onSearch?: (q: string) => void };
 
 /* ---------- Header ---------- */
 export default function Header({ onSearch }: Props) {
@@ -99,14 +80,21 @@ export default function Header({ onSearch }: Props) {
   const [fullName, setFullName] = useState("User");
   const [bio, setBio] = useState("");
   const [profile, setProfile] = useState<ProfileData | null>(null);
+
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<SearchItem[]>([]);
+  const [activeIdx, setActiveIdx] = useState(0);
+
   const navigate = useNavigate();
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     initThemeFromCache();
 
     (async () => {
       try {
-        const u = await fetchMe(); // uses Firebase ID token
+        const u = await fetchMe(); // uses Firebase ID token under the hood
         setProfile(u);
         setFullName(u.fullName || [u.firstName, u.lastName].filter(Boolean).join(" ") || u.firstName);
         setBio(u.bio || "");
@@ -116,15 +104,49 @@ export default function Header({ onSearch }: Props) {
     })();
   }, []);
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!boxRef.current) return;
+      if (!boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  // Debounced fetch
+  useEffect(() => {
+    if (!q || q.trim().length < 2) {
+      setItems([]);
+      setOpen(false);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const url = `${API_URL}/api/search/users?q=${encodeURIComponent(q)}&limit=8`;
+        const res = await fetch(url, { headers: { "Content-Type": "application/json" } });
+        if (!res.ok) throw new Error("search failed");
+        const data = await res.json();
+        const list: SearchItem[] = Array.isArray(data?.items) ? data.items : [];
+        setItems(list);
+        setActiveIdx(0);
+        setOpen(list.length > 0);
+      } catch {
+        setItems([]);
+        setOpen(false);
+      }
+      if (onSearch) onSearch(q);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [q, onSearch]);
+
   /** Fired whenever the avatar (profile dropdown trigger) is pressed. */
   const logAuthDebug = async () => {
     const auth = getAuth();
     const user = auth.currentUser;
     const token = user ? await user.getIdToken() : null;
 
-    // eslint-disable-next-line no-console
     console.log("[ProfileDropdown Trigger]");
-    // eslint-disable-next-line no-console
     console.log("FirebaseUser:", user
       ? {
           uid: user.uid,
@@ -138,32 +160,48 @@ export default function Header({ onSearch }: Props) {
             })) ?? [],
         }
       : null);
-    // eslint-disable-next-line no-console
     console.log("ID Token:", token);
-    // eslint-disable-next-line no-console
     console.log("ProfileData:", profile);
   };
 
-const goToMyProfile = () => {
-  if (!profile) return navigate("/auth");
-  console.log("Profile data:", profile);
-
-  const parts = profile.fullName?.trim().split(" ") || [];
-  const firstName = parts[0] || "";
-  const lastName = parts.slice(1).join(" ") || "";
-
-  const slug = kebabName(firstName, lastName);
-  console.log("Navigating to profile:", slug);
-
-  navigate(`/u/${slug}`);
-};
-
+  const goToMyProfile = () => {
+    if (!profile) return navigate("/auth");
+    const parts = profile.fullName?.trim().split(" ") || [];
+    const firstName = parts[0] || "";
+    const lastName = parts.slice(1).join(" ") || "";
+    const slug = kebabName(firstName, lastName);
+    navigate(`/u/${slug}`);
+  };
 
   const handleSignOut = async () => {
     try {
       await signOut(getAuth());
     } finally {
       navigate("/auth", { replace: true });
+    }
+  };
+
+  const goToItem = (idx: number) => {
+    const item = items[idx];
+    if (!item) return;
+    setOpen(false);
+    setQ("");
+    navigate(`/u/${item.slug}`);
+  };
+
+  const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (!open) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.min(i + 1, Math.max(items.length - 1, 0)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      goToItem(activeIdx);
+    } else if (e.key === "Escape") {
+      setOpen(false);
     }
   };
 
@@ -178,20 +216,47 @@ const goToMyProfile = () => {
       </div>
 
       {/* Center: search */}
-      <div className="header-center">
+      <div className="header-center" ref={boxRef}>
         <div className="search">
           <IconSearch className="search-icon" />
           <input
+            ref={inputRef}
             className="search-input"
             value={q}
-            onChange={(e) => {
-              const v = e.target.value;
-              setQ(v);
-              onSearch(v);
-            }}
-            placeholder="Search people, companies, events…"
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Search people by name…"
             aria-label="Search"
           />
+          {open && items.length > 0 && (
+            <div className="search-pop" role="listbox" aria-label="Search results">
+              {items.map((it, i) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`search-item ${i === activeIdx ? "is-active" : ""}`}
+                  role="option"
+                  aria-selected={i === activeIdx}
+                  onMouseEnter={() => setActiveIdx(i)}
+                  onClick={() => goToItem(i)}
+                >
+                  <img
+                    className="search-avatar"
+                    src={it.avatarUrl || "/img/avatar-placeholder.png"}
+                    alt=""
+                    aria-hidden
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "/img/avatar-placeholder.png";
+                    }}
+                  />
+                  <div className="search-meta">
+                    <div className="search-name">{it.fullName}</div>
+                    <div className="search-sub">@{it.slug}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -215,26 +280,25 @@ const goToMyProfile = () => {
           </button>
         </nav>
 
-        <BadgedIcon label="Notifications" count={3}>
+        <button className="icon-btn" aria-label="Notifications" type="button">
           <IconBell />
-        </BadgedIcon>
-        <BadgedIcon label="Messages" count={2}>
+          <span className="badge" aria-hidden>3</span>
+        </button>
+        <button className="icon-btn" aria-label="Messages" type="button">
           <IconChat />
-        </BadgedIcon>
+          <span className="badge" aria-hidden>2</span>
+        </button>
+
         <div className="divider" aria-hidden />
 
-        {/* Profile dropdown */}
         <ProfileDropdown
           name={fullName}
           subtitle={bio}
-          onTrigger={logAuthDebug}     
+          onTrigger={logAuthDebug}
           onViewProfile={goToMyProfile}
           onSettings={() => navigate("/settings")}
           onSignOut={handleSignOut}
         />
-
-        {/* Optional theme toggle for debugging */}
-        {/* <button className="toggle" onClick={toggleTheme} aria-label="Toggle theme">◑</button> */}
       </div>
     </header>
   );

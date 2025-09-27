@@ -4,7 +4,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Auth from "./pages/Auth";
 import ServerTest from "./pages/ServerTest";
 import Home from "./pages/Home";
-import FaceSetup from "./components/FaceSetup";
+import FaceSetup from "./pages/FaceSetup";
 import Onboarding from "./pages/Onboarding";
 import RequireAuth from "./components/RequireAuth";
 import ProfilePage, { RedirectToMyProfile } from "./pages/ProfilePage";
@@ -35,9 +35,9 @@ export default function App() {
       <Route
         path="/webcam"
         element={
-          // <RequireAuth>
+          <RequireAuth>
             <FaceSetup />
-          // </RequireAuth>
+          </RequireAuth>
         }
       />
       <Route

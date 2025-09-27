@@ -1,13 +1,32 @@
 # app.py
 from __future__ import annotations
 
-import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import firebase_admin
+from firebase_admin import credentials, firestore
+import os
+
+import base64, io, numpy as np
 
 import profiles_api as profiles
+from search import search_users
+
+from PIL import Image
+from face_store import save_face_enrollment
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+
+SERVICE_ACCOUNT_PATH = os.getenv(
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "neru-b3128-firebase-adminsdk-fbsvc-11110f3ad3.json",
+)
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": CORS_ORIGINS}})
@@ -15,6 +34,16 @@ CORS(app, resources={r"/*": {"origins": CORS_ORIGINS}})
 @app.get("/")
 def health():
     return jsonify({"ok": True, "service": "profiles-api"})
+
+@app.get("/api/search/users")
+def api_search_users():
+    q = (request.args.get("q") or "").strip()
+    try:
+        limit = int(request.args.get("limit") or "8")
+    except Exception:
+        limit = 8
+    items = search_users(q, limit=limit)
+    return jsonify({"items": items})
 
 @app.post("/api/users/<slug>/follow")
 def api_follow(slug: str):
@@ -88,11 +117,15 @@ def admin_upsert_user():
 
 @app.post("/api/enroll-face")
 def enroll_face():
-    data = request.get_json()
-    user_id = data.get("user_id")
+    data = request.get_json(silent=True) or {}
+    uid = data.get("user_id")
     frames = data.get("frames", [])
-    
-    return {'message': 'enroll face request'}
+
+    print(f"[enroll_face] Received enrollment for uid: {uid} with {len(frames)} frames")  # LOG
+
+    result = save_face_enrollment(uid, frames)
+    return jsonify(result), (200 if result.get("ok") else 400)
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

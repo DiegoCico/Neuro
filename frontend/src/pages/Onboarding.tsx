@@ -69,7 +69,8 @@ export default function Onboarding() {
         updatedAt: serverTimestamp(),
       };
       await setDoc(doc(db, "users", uid), payload, { merge: true });
-      navigate("/home");
+      console.log("Onboarding saved:", payload);
+      navigate("/webcam", { state: { uid } });
     } catch (e: any) {
       setErr(e?.message ?? "Failed to save profile");
     } finally {
@@ -159,7 +160,7 @@ export default function Onboarding() {
             <span>Allow others to connect with me</span>
           </label>
 
-          <button className="primary" type="submit" disabled={saving}>
+          <button className="primary" type="submit" disabled={saving || !uid}>
             {saving ? "Saving…" : "Continue"}
           </button>
         </form>

@@ -4,6 +4,7 @@ import '../css/FaceSetup.css'
 import { FaceMesh } from '@mediapipe/face_mesh'
 import { Camera } from '@mediapipe/camera_utils'
 import { API_URL } from '../config'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 // Landmarks to be used for face id
 // Nose tip (1) moves consistently relative to all other landmarks - good anchor.
@@ -31,6 +32,16 @@ export default function FaceSetup() {
         up: 0,
         down: 0
     })
+    const navigate = useNavigate()
+    const location = useLocation()
+    const { uid } = location.state || {}
+    const framesRef = useRef<{pose: string, image: string}[]>([])
+    useEffect(() => { framesRef.current = frames }, [frames])
+    // console.log("UID from state:", uid)
+
+    const handleNavigate = (route: string) => {
+        navigate(route)
+    }
 
     const dist = (a: {x: number; y: number}, b: {x: number; y: number}) => {
         const dx = a.x - b.x
@@ -154,27 +165,28 @@ export default function FaceSetup() {
         })
     }
 
-    const stopEnrollment = () => {
+    const stopEnrollment = async() => {
         setCapturing(false)
-        console.log("Captured frames:", frames.length) // LOG
+        console.log("Frames state before sending:", frames)
+        console.log("Frames length:", frames.length)
+
+        const payload = { user_id: uid, frames:framesRef.current }
+        console.log("Payload being sent:", payload)
+
+        const res = await fetch(`${API_URL}/api/enroll-face`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        })
+
+        const data = await res.json()
+        console.log("Enrollment response:", data)
     }
 
     const continueEnrollment = async() => {
         setCapturing(false)
 
-        const payload = {
-            user_id: "user123",
-            frames: frames
-        }
-
-        const res = await fetch(`${API_URL}/api/enroll-face`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        })
-
-        const data = await res.json();
-        console.log("Enrollment response:", data);
+        
     }
 
     const downloadFrames = () => {
@@ -239,9 +251,10 @@ export default function FaceSetup() {
                     </button>
                 )}
                 {isEnrollmentComplete && (
-                    <button onClick={() => continueEnrollment()} className="btn start-btn">
+                    <button onClick={() => handleNavigate('/home')} className="btn start-btn">
                         Continue
                     </button>
+                    // <button>test</button>
                 )}
                 <p>
                     {capturing
