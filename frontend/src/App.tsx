@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 import FaceSetup from "./components/FaceSetup";
 import Onboarding from "./pages/Onboarding";
 import RequireAuth from "./components/RequireAuth";
+import ProfilePage, { RedirectToMyProfile } from "./pages/ProfilePage";
 
 export default function App() {
   return (
@@ -37,6 +38,22 @@ export default function App() {
           // <RequireAuth>
             <FaceSetup />
           // </RequireAuth>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <RequireAuth>
+            <RedirectToMyProfile />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/u/:slug"
+        element={
+          <RequireAuth>
+            <ProfilePage />
+          </RequireAuth>
         }
       />
 

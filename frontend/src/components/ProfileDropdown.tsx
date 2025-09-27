@@ -5,9 +5,10 @@ import Avatar from "./Avatar";
 type Props = {
   name: string;
   subtitle?: string;
-  onViewProfile?: () => void;
+  onViewProfile: () => void;           // keep required
   onSettings?: () => void;
   onSignOut?: () => void;
+  onTrigger?: () => void;            
 };
 
 type ThemeMode = "light" | "dark";
@@ -36,18 +37,17 @@ export default function ProfileDropdown({
   onViewProfile,
   onSettings,
   onSignOut,
+  onTrigger,                       // <-- NEW
 }: Props) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme());
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // sync theme on mount
   useEffect(() => {
     applyTheme(theme);
   }, []);
 
-  // click outside + Esc
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
@@ -80,7 +80,11 @@ export default function ProfileDropdown({
         className="pd-trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          // 🔊 Fire the hook so Header can log token + user
+          onTrigger?.();
+          setOpen((v) => !v);
+        }}
       >
         <Avatar name={name} size={32} />
       </button>
@@ -90,22 +94,14 @@ export default function ProfileDropdown({
           <div className="pd-header">
             <div className="pd-name">{name}</div>
             {subtitle ? <div className="pd-subtitle">{subtitle}</div> : null}
-            <button
-              className="pd-primary"
-              role="menuitem"
-              onClick={onViewProfile ?? (() => (window.location.href = "/profile"))}
-            >
+            <button className="pd-primary" role="menuitem" onClick={onViewProfile}>
               View Profile
             </button>
           </div>
 
           <div className="pd-section">
             <div className="pd-title">Account</div>
-            <button
-              className="pd-item"
-              role="menuitem"
-              onClick={onSettings ?? (() => (window.location.href = "/settings"))}
-            >
+            <button className="pd-item" role="menuitem" onClick={onSettings ?? (() => (window.location.href = "/settings"))}>
               Settings &amp; Privacy
             </button>
             <button className="pd-item" role="menuitem" onClick={() => alert("Help center")}>
@@ -152,11 +148,7 @@ export default function ProfileDropdown({
             </button>
           </div>
 
-          <button
-            className="pd-signout"
-            role="menuitem"
-            onClick={onSignOut ?? (() => alert("Sign out"))}
-          >
+          <button className="pd-signout" role="menuitem" onClick={onSignOut ?? (() => alert("Sign out"))}>
             Sign Out
           </button>
         </div>

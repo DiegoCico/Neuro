@@ -1,9 +1,10 @@
-// src/pages/Onboarding.tsx
-import React, { useEffect, useMemo, useState } from "react";
+// Adds fields the profile actually shows (headline/location/bio) and seeds stats
+
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase"; // make sure you export db in ../firebase
+import { db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
 export default function Onboarding() {
@@ -15,11 +16,12 @@ export default function Onboarding() {
   const [uid, setUid] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState("");
+  const [headline, setHeadline] = useState("");
   const [dob, setDob] = useState("");
   const [occupation, setOccupation] = useState("");
   const [school, setSchool] = useState("");
   const [email, setEmail] = useState(prefillEmail);
-  const [location, setLocation] = useState("");
+  const [locationVal, setLocationVal] = useState("");
   const [website, setWebsite] = useState("");
   const [bio, setBio] = useState("");
   const [interests, setInterests] = useState<string>("");
@@ -51,15 +53,17 @@ export default function Onboarding() {
         uid,
         email: email.trim(),
         fullName: fullName.trim(),
+        headline: headline.trim() || null,              // ← used on Profile
         dateOfBirth: dob || null,
         occupation: occupation.trim() || null,
         school: school.trim() || null,
-        location: location.trim() || null,
+        location: locationVal.trim() || null,          // ← used on Profile
         website: website.trim() || null,
-        bio: bio.trim() || null,
+        bio: bio.trim() || null,                       // ← used on Profile
         interests: interests
           ? interests.split(",").map((s) => s.trim()).filter(Boolean)
           : [],
+        stats: { followers: 0, views: 0 },             // ← ensures TWO stat boxes
         allowConnect,
         onboardingCompleted: true,
         createdAt: serverTimestamp(),
@@ -99,6 +103,15 @@ export default function Onboarding() {
           </label>
 
           <label>
+            <span>Headline</span>
+            <input
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value)}
+              placeholder="SDE Intern @ Amazon · Northeastern ’26"
+            />
+          </label>
+
+          <label>
             <span>Date of birth</span>
             <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
           </label>
@@ -120,7 +133,7 @@ export default function Onboarding() {
 
           <label>
             <span>Location</span>
-            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Boston, MA" />
+            <input value={locationVal} onChange={(e) => setLocationVal(e.target.value)} placeholder="Boston, MA" />
           </label>
 
           <label>

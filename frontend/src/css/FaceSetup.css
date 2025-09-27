@@ -1,22 +1,27 @@
-    .face-setup-container {
+.face-setup-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: black;
+  background: linear-gradient(180deg, #0f172a, #1e293b);
   color: white;
+  font-family: "Inter", sans-serif;
+}
+
+circle {
+  transition: stroke-dashoffset 0.5s ease;
 }
 
 .circle-wrapper {
   position: relative;
-  width: 300px;
-  height: 300px;
+  width: 450px;
+  height: 450px;
 }
 
 .webcam-feed {
-  width: 300px;
-  height: 300px;
+  width: 450px;
+  height: 450px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -25,8 +30,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 300px;
-  height: 300px;
+  width: 450px;
+  height: 450px;
   pointer-events: none;
 }
 
@@ -36,22 +41,30 @@
 }
 
 .btn {
-  padding: 10px 20px;
-  margin: 5px;
+  padding: 12px 24px;
+  margin: 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.3s ease;
 }
 
 .start-btn {
   background: #2563eb;
   color: white;
 }
+.start-btn:hover {
+  background: #1d4ed8;
+}
 
 .stop-btn {
   background: #dc2626;
   color: white;
+}
+.stop-btn:hover {
+  background: #b91c1c;
 }
 
 .warning-text {
@@ -59,3 +72,37 @@
   font-weight: bold;
   margin-top: 10px;
 }
+
+.pose-checklist {
+  margin-top: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px 18px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 15px;
+}
+
+.pose-checklist ul {
+  list-style: none;
+  padding: 0;
+}
+
+.pose-checklist li {
+  margin: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pose-checklist li.done {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.pose-instruction {
+  margin-top: 16px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #38bdf8;
+}
+

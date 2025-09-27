@@ -13,19 +13,62 @@ import { Camera } from '@mediapipe/camera_utils'
 
 export default function FaceSetup() {
     const webCamRef = useRef<Webcam>(null)
-    const [frames, setFrames] = useState<string[]>([])
+    const [frames, setFrames] = useState<{ pose: string, image: string}[]>([])
     const [capturing, setCapturing] = useState(false)
+    const capturingRef = useRef(false)
     const [progress, setProgress] = useState(0)
     const [isFaceDetected, setIsFaceDetected] = useState(false)
+    const [facePoses, setFacePoses] = useState({
+        neutral: false, left: false, right: false, up: false, down: false
+    })
+    const [currentPose, setCurrentPose] = useState<'neutral' | 'left' | 'right' | 'up' | 'down' | null>(null)
+    const [isEnrollmentComplete, setIsEnrollmentComplete] = useState(false)
+    const [poseHold, setPoseHold] = useState({
+        neutral: 0,
+        left: 0,
+        right: 0,
+        up: 0,
+        down: 0
+    })
 
-    const captureFrame = useCallback(() => {
-        if (webCamRef.current) {
-            const imageSrc = webCamRef.current.getScreenshot()
-            if (imageSrc) {
-                setFrames(prev => [...prev, imageSrc])
-            }
-        }
-    }, [])
+    const dist = (a: {x: number; y: number}, b: {x: number; y: number}) => {
+        const dx = a.x - b.x
+        const dy = a.y - b.y
+        return Math.hypot(dx, dy)
+    }
+
+    useEffect(() => {
+        capturingRef.current = capturing
+    }, [capturing])
+
+    const classifyPoseFromLandmarks = (
+        landmarks: Array<{ x: number; y: number }>
+        ): 'neutral' | 'left' | 'right' | 'up' | 'down' => {
+        const nose = landmarks[1]
+        const leftCheek = landmarks[234]
+        const rightCheek = landmarks[454]
+        const chin = landmarks[152]
+        const forehead = landmarks[10]
+        if (!nose || !leftCheek || !rightCheek || !chin || !forehead) return 'neutral'
+
+        const dl = dist(nose, leftCheek)
+        const dr = dist(nose, rightCheek)
+        const lrRatio = dl / dr
+
+        const df = dist(nose, forehead)
+        const dc = dist(nose, chin)
+        const udRatio = df / dc
+
+        const LR_EPS = 0.25
+        const UD_EPS = 0.20
+
+        if (lrRatio > 1 + LR_EPS) return 'left'
+        if (dr / dl > 1 + LR_EPS) return 'right'
+        if (udRatio < 1 - UD_EPS) return 'up'  
+        if (udRatio > 1 + UD_EPS) return 'down'
+
+        return 'neutral'
+    }
 
     useEffect(() => {
         if (webCamRef.current) {
@@ -45,13 +88,51 @@ export default function FaceSetup() {
                 })
 
                 faceMesh.onResults((results) => {
-                    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                        console.log("Face detected with landmarks:", results.multiFaceLandmarks[0])
-                        setIsFaceDetected(true)
-                    } else {
-                        console.log('No face detected')
-                        setIsFaceDetected(false)
-                    }
+                    const landmarks = results.multiFaceLandmarks?.[0]
+                    const hasFace = !!landmarks
+                    setIsFaceDetected(hasFace)
+
+                    if (!capturingRef.current || !hasFace) return
+
+                    const pose = classifyPoseFromLandmarks(landmarks as any)
+                    setCurrentPose(pose)
+
+                    setPoseHold((prev) => {
+                        const updated = { neutral: 0, left: 0, right: 0, up: 0, down: 0 }
+                        updated[pose] = prev[pose] + 1
+
+                        const threshold = 5
+
+                        if (updated[pose] >= threshold) {
+                            setFacePoses((old) => {
+                            if (old[pose]) return old // already done
+
+                            const newPoses = { ...old, [pose]: true }
+
+                            // ✅ capture frame once per pose
+                            if (webCamRef.current) {
+                                const imageSrc = webCamRef.current.getScreenshot()
+                                if (imageSrc) {
+                                setFrames((prevFrames) => [...prevFrames, { pose, image: imageSrc }])
+                                }
+                            }
+
+                            // ✅ update progress with fresh state
+                            const completedCount = Object.values(newPoses).filter(Boolean).length
+                            setProgress(Math.min(completedCount * 20, 100))
+
+                            // ✅ check enrollment complete
+                            if (Object.values(newPoses).every(Boolean)) {
+                                setIsEnrollmentComplete(true)
+                                stopEnrollment()
+                            }
+
+                            return newPoses
+                            })
+                        }
+
+                        return updated
+                    })
                 })
 
                 const camera = new Camera(videoElement, {
@@ -66,30 +147,13 @@ export default function FaceSetup() {
         }
     }, [webCamRef])
 
-    useEffect(() => {
-        let interval: NodeJS.Timeout | null = null
-        if (capturing) {
-            interval = setInterval(() => {
-                if (isFaceDetected) {
-                    captureFrame()
-                    setProgress(prev => Math.min(prev + 5, 100))
-                } else {
-                    console.log("Skipped frame - no face detected")
-                }
-            }, 500)
-        }
-        
-        return () => {
-            if (interval) {
-                clearInterval(interval)
-            }
-        }
-    }, [capturing, isFaceDetected, captureFrame])
-
     const startEnrollment = () => {
         setFrames([])
         setProgress(0)
         setCapturing(true)
+        setFacePoses({
+            neutral: false, left: false, right: false, up: false, down: false
+        })
     }
 
     const stopEnrollment = () => {
@@ -101,8 +165,8 @@ export default function FaceSetup() {
     const downloadFrames = () => {
         frames.forEach((frame, index) => {
             const a = document.createElement("a")
-            a.href = frame
-            a.download = `frame_${index + 1}.jpg`
+            a.href = frame.image
+            a.download = `frame_${frame.pose}.jpg`
             a.click()
         })
     }
@@ -120,51 +184,91 @@ export default function FaceSetup() {
                 mirrored
                 />
 
-                <svg className="circle-overlay" viewBox="0 0 300 300">
-                {/* Background ring */}
-                <circle
-                    cx="150"
-                    cy="150"
-                    r="140"
-                    stroke="gray"
-                    strokeWidth="8"
-                    fill="none"
-                />
-                {/* Progress ring */}
-                <circle
-                    cx="150"
-                    cy="150"
-                    r="140"
-                    stroke="limegreen"
-                    strokeWidth="8"
-                    fill="none"
-                    strokeDasharray={2 * Math.PI * 140}
-                    strokeDashoffset={
-                    2 * Math.PI * 140 - (2 * Math.PI * 140 * progress) / 100
-                    }
-                    strokeLinecap="round"
-                    transform="rotate(-90 150 150)"
-                />
+                <svg className="circle-overlay" viewBox="0 0 450 450">
+                    {/* Background ring */}
+                    <circle
+                        cx="225"
+                        cy="225"
+                        r="210"
+                        stroke="gray"
+                        strokeWidth="8"
+                        fill="none"
+                    />
+                    {/* Progress ring */}
+                    <circle
+                        cx="225"
+                        cy="225"
+                        r="210"
+                        stroke="limegreen"
+                        strokeWidth="8"
+                        fill="none"
+                        strokeDasharray={2 * Math.PI * 210}
+                        strokeDashoffset={
+                        2 * Math.PI * 210 - (2 * Math.PI * 210 * progress) / 100
+                        }
+                        strokeLinecap="round"
+                        transform="rotate(-90 225 225)"
+                    />
                 </svg>
             </div>
 
             {/* Controls */}
             <div className="controls">
                 {!capturing ? (
-                <button onClick={startEnrollment} className="btn start-btn">
-                    Start Face Enrollment
-                </button>
+                    <button onClick={startEnrollment} className="btn start-btn">
+                        Start Face Enrollment
+                    </button>
                 ) : (
-                <button onClick={stopEnrollment} className="btn stop-btn">
-                    Stop
-                </button>
+                    <button onClick={stopEnrollment} className="btn stop-btn">
+                        Stop
+                    </button>
+                )}
+                {isEnrollmentComplete && (
+                    <button onClick={() => console.log("TODO: send frames to backend")} className="btn start-btn">
+                        Continue
+                    </button>
                 )}
                 <p>
-                {capturing
+                    {capturing
                     ? "Move your head slowly to complete the circle..."
                     : "Press start to begin scanning"}
                 </p>
-                {!capturing && frames.length > 0 && (
+                <div className="pose-checklist">
+                    <p><strong>Enrollment Steps:</strong></p>
+                    <ul>
+                        <li className={facePoses.neutral ? "done" : ""}>
+                        Neutral {facePoses.neutral ? "✅" : "❌"}
+                        </li>
+                        <li className={facePoses.left ? "done" : ""}>
+                        Turn Left {facePoses.left ? "✅" : "❌"}
+                        </li>
+                        <li className={facePoses.right ? "done" : ""}>
+                        Turn Right {facePoses.right ? "✅" : "❌"}
+                        </li>
+                        <li className={facePoses.up ? "done" : ""}>
+                        Look Up {facePoses.up ? "✅" : "❌"}
+                        </li>
+                        <li className={facePoses.down ? "done" : ""}>
+                        Look Down {facePoses.down ? "✅" : "❌"}
+                        </li>
+                    </ul>
+                </div>
+
+                {/* Next instruction */}
+                <div className="pose-instruction">
+                    {!facePoses.neutral
+                        ? "Look forward to start"
+                        : !facePoses.left
+                        ? "Turn your head left"
+                        : !facePoses.right
+                        ? "Turn your head right"
+                        : !facePoses.up
+                        ? "Tilt your head upward"
+                        : !facePoses.down
+                        ? "Tilt your head downward"
+                        : "Enrollment complete!"}
+                </div>
+                {isEnrollmentComplete && (
                     <button onClick={downloadFrames} className="btn">
                         Download Frames
                     </button>

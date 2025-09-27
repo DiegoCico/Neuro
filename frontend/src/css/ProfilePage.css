@@ -1,0 +1,195 @@
+/* src/css/ProfilePage.css */
+
+/* ---------- Page shell ---------- */
+.vp-root {
+  --radius: 16px;
+  --radius-sm: 12px;
+  --gap: 16px;
+  --muted: color-mix(in oklab, var(--text) 55%, transparent 45%);
+  --elev: 0 8px 28px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.12);
+  --ring: 0 0 0 3px color-mix(in oklab, var(--text) 8%, transparent 92%);
+  margin: 0 auto;
+  padding: 24px clamp(16px, 4vw, 40px);
+  max-width: 1200px;
+}
+
+body:has(.header) .vp-root { padding-top: clamp(16px, 3vh, 28px); }
+
+/* ---------- Cover ---------- */
+.vp-cover {
+  height: 170px;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(65% 120% at 15% 0%, color-mix(in oklab, var(--text) 10%, transparent) 0%, transparent 60%),
+    linear-gradient(135deg, color-mix(in oklab, var(--text) 8%, transparent) 0%, transparent 55%),
+    var(--card);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---------- 2-col layout ---------- */
+.vp-shell {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  margin-top: -48px;
+}
+@media (max-width: 980px) {
+  .vp-shell { grid-template-columns: 1fr; margin-top: -36px; }
+}
+
+/* ---------- Aside card ---------- */
+.vp-aside {
+  position: relative;
+}
+.vp-aside-card {
+  position: sticky;
+  top: 72px; /* space under sticky header */
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elev);
+  padding: 16px;
+}
+
+.vp-avatar {
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  background: color-mix(in oklab, var(--card) 70%, #888 30%);
+  color: var(--text);
+  border: 3px solid var(--card);
+  box-shadow: 0 8px 26px rgba(0,0,0,.22);
+  overflow: hidden;
+  user-select: none;
+}
+
+.vp-aside-head {
+  display: grid; justify-items: start; gap: 8px;
+}
+.vp-aside-name { font-weight: 800; letter-spacing: .2px; }
+.vp-aside-sub { opacity: .9; }
+.vp-aside-loc { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+.vp-pin { font-size: 1.05rem; line-height: 1; }
+
+.vp-aside-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+.vp-aside-stat {
+  background: color-mix(in oklab, var(--card) 92%, #fff 8%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+}
+.vp-aside-num { font-weight: 900; }
+.vp-aside-label { color: var(--muted); font-size: .9rem; }
+
+.vp-aside-actions { display: grid; gap: 8px; margin: 6px 0 10px; }
+.vp-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform .06s ease, background .15s ease, box-shadow .15s ease;
+}
+.vp-btn:hover { background: color-mix(in oklab, var(--card) 70%, #fff 30%); }
+.vp-btn:active { transform: translateY(1px); }
+.vp-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.vp-btn.primary {
+  background: color-mix(in oklab, var(--text) 9%, transparent);
+  border-color: color-mix(in oklab, var(--text) 12%, var(--border));
+}
+
+.vp-aside-nav { display: grid; gap: 6px; margin-top: 6px; }
+.vp-aside-link {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.vp-aside-link:hover { background: color-mix(in oklab, var(--card) 80%, #fff 20%); }
+.vp-aside-link.is-active { background: color-mix(in oklab, var(--card) 65%, #fff 35%); }
+
+.vp-aside-links {
+  display: grid; gap: 6px; margin-top: 10px;
+}
+.vp-aside-links a {
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px dashed var(--border);
+  width: fit-content;
+}
+
+/* ---------- Main content ---------- */
+.vp-main {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elev);
+  padding: clamp(16px, 2.4vw, 24px);
+}
+
+.vp-hero-title {
+  font-size: clamp(1.3rem, 2.6vw, 2rem);
+  line-height: 1.2;
+  font-weight: 900;
+}
+.vp-hero-sub { margin-top: 8px; opacity: .92; }
+
+.vp-section { margin-top: 22px; }
+.vp-h2 {
+  font-size: 1rem;
+  text-transform: none;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+.vp-copy { margin: 0; line-height: 1.7; }
+
+.vp-highlight {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: color-mix(in oklab, var(--card) 94%, #fff 6%);
+  box-shadow: 0 4px 14px rgba(0,0,0,.06);
+  margin-top: 10px;
+}
+.vp-highlight-title { font-weight: 800; }
+.vp-highlight-sub { color: var(--muted); margin-top: 6px; }
+
+/* ---------- Loading ---------- */
+.vp-loading { display: grid; place-items: center; min-height: 50vh; }
+.vp-spinner {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--text);
+  animation: vp-spin 900ms linear infinite;
+}
+@keyframes vp-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Theme tokens (black/white) ---------- */
+:root[data-theme="light"] {
+  --card: #fff;
+  --text: #0f1113;
+  --border: #e7e7e9;
+}
+:root[data-theme="dark"] {
+  --card: #0f1113;
+  --text: #f2f3f5;
+  --border: #262a2f;
+}
+
+/* subtle entrance */
+.vp-aside-card, .vp-main, .vp-cover { animation: vp-fade-in .18s ease-out both; }
+@keyframes vp-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }

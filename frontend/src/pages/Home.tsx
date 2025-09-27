@@ -1,7 +1,9 @@
+// src/pages/Home.tsx
 import React, { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import "../css/Home.css";
 import Header from "../components/Header";
-import { fetchUserNames } from "../userProfile";
+import { fetchMe, type ProfileData } from "../userProfile";
 
 export type Post = {
   id: string;
@@ -14,16 +16,44 @@ export type Post = {
 };
 
 export default function Home() {
-  const [query, setQuery] = useState("");
-  const [firstName, setFirstName] = useState("User");
+  const [query, setQuery] = useState<string>("");
+  const [firstName, setFirstName] = useState<string>("User");
+  const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(true);
 
   useEffect(() => {
-    fetchUserNames().then(({ firstName }) => setFirstName(firstName));
+    (async () => {
+      try {
+        const data: ProfileData = await fetchMe();
+        if (data?.firstName) setFirstName(data.firstName);
+        setAuthorized(true);
+      } catch {
+        setAuthorized(false); // not logged in → redirect
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="home-root">
+        <p>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!authorized) {
+    return <Navigate to="/auth" replace />;
+  }
+
   return (
-    <div>   
-        <Header onSearch={(q) => setQuery(q)} />
+    <div className="home-root">
+      <Header onSearch={(q: string) => setQuery(q)} />
+      <main className="home-main">
+        <h2 className="home-greeting">Welcome back, {firstName}</h2>
+        {query && <p className="home-query">Searching for: “{query}”</p>}
+      </main>
     </div>
   );
 }
