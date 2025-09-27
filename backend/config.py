@@ -434,23 +434,37 @@ def fetch_posts():
 @app.route('/api/posts/like', methods=['POST'])
 def like_post():
     try:
-        auth_header = request.headers.get('Authorization')
+        auth_header = request.headers.get("Authorization")
         uid = profiles.verify_bearer_uid(auth_header)
         if not uid:
             return jsonify({"ok": False, "error": "unauthorized"}), 401
-        
+
         data = request.get_json(silent=True) or {}
-        post_id = data.get('postId')
+        post_id = data.get("postId")
         if not post_id:
             return jsonify({"ok": False, "error": "missing postId"}), 400
-        
-        post_ref = db.collection('posts').document(post_id)
 
-        post_ref.update({
-            "likes": firestore.ArrayUnion([uid])
-        })
+        post_ref = db.collection("posts").document(post_id)
+        post_doc = post_ref.get()
 
-        return jsonify({"ok": True, "postId": post_id, "likedBy": uid}), 200
+        if not post_doc.exists:
+            return jsonify({"ok": False, "error": "post not found"}), 404
+
+        post_data = post_doc.to_dict()
+        likes = post_data.get("likes", [])
+
+        if uid in likes:
+            post_ref.update({
+                "likes": firestore.ArrayRemove([uid])
+            })
+            action = "unliked"
+        else:
+            post_ref.update({
+                "likes": firestore.ArrayUnion([uid])
+            })
+            action = "liked"
+
+        return jsonify({"ok": True, "postId": post_id, "action": action}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

@@ -102,9 +102,13 @@
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .post-like-btn:hover {
   color: var(--text);
+}
+
+.post-like-btn.liked {
+  color: red; /* highlight liked posts */
 }

@@ -1,0 +1,129 @@
+:root {
+  color-scheme: light dark;
+}
+
+/* ---------- Variable fallbacks (used only if your app hasn't defined them) ---------- */
+.na-scope {
+  /* fallbacks */
+  --na-card: var(--card, #111);
+  --na-border: var(--border, #2a2a2a);
+  --na-text: var(--text, #eaeaea);
+  --na-text-muted: color-mix(in oklab, var(--na-text) 60%, transparent);
+  --na-elev: 0 6px 20px rgba(0,0,0,.35);
+  --na-elev-hover: 0 10px 26px rgba(0,0,0,.4);
+  --na-card-2: color-mix(in oklab, var(--na-card) 92%, #fff 8%);
+  --na-input: color-mix(in oklab, var(--na-card) 88%, #fff 12%);
+  --na-input-ghost: color-mix(in oklab, var(--na-card) 95%, #fff 5%);
+  --na-ink: #111;
+  --na-ink-contrast: #fff;
+}
+
+/* Optional: explicit overrides if your theme toggler sets data-theme on <html> or <body> */
+[data-theme="light"] .na-scope {
+  --na-card: var(--card, #ffffff);
+  --na-border: var(--border, #e6e6e6);
+  --na-text: var(--text, #111111);
+  --na-text-muted: color-mix(in oklab, var(--na-text) 55%, transparent);
+  --na-elev: 0 6px 22px rgba(0,0,0,.12);
+  --na-elev-hover: 0 10px 28px rgba(0,0,0,.16);
+  --na-card-2: #f8f8f8;
+  --na-input: #f6f6f6;
+  --na-input-ghost: #fafafa;
+  --na-ink: #111;
+  --na-ink-contrast: #fff;
+}
+[data-theme="dark"] .na-scope {
+  /* keeps defaults above */
+}
+
+/* If your app doesn't set data-theme, fall back to system preference */
+@media (prefers-color-scheme: light) {
+  :not([data-theme]) .na-scope {
+    --na-card: #ffffff;
+    --na-border: #e6e6e6;
+    --na-text: #111111;
+    --na-text-muted: color-mix(in oklab, var(--na-text) 55%, transparent);
+    --na-elev: 0 6px 22px rgba(0,0,0,.12);
+    --na-elev-hover: 0 10px 28px rgba(0,0,0,.16);
+    --na-card-2: #f8f8f8;
+    --na-input: #f6f6f6;
+    --na-input-ghost: #fafafa;
+    --na-ink: #111;
+    --na-ink-contrast: #fff;
+  }
+}
+
+/* ---------- Component styles ---------- */
+.na-scope {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 8px;
+  pointer-events: none; /* children re-enable */
+  z-index: 24;          /* or set inline via style if you prefer */
+}
+
+/* FAB */
+.na-fab {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--na-ink);
+  color: var(--na-ink-contrast);
+  border: 1px solid var(--na-border);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--na-elev);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+  pointer-events: auto;
+}
+.na-fab:hover { transform: translateY(-1px); box-shadow: var(--na-elev-hover); }
+.na-fab:active { transform: translateY(0); }
+.na-fab-icon { font-weight: 800; font-size: 13px; letter-spacing: .5px; }
+
+/* Panel */
+.na-panel {
+  width: min(520px, 52vw);
+  max-height: min(70vh, 520px);
+  background: var(--na-card);
+  color: var(--na-text);
+  border: 1px solid var(--na-border);
+  border-radius: 16px;
+  overflow: hidden;
+  transform-origin: 100% 100%;
+  transform: scale(.85) translateY(8px);
+  opacity: 0; pointer-events: none;
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .22s ease;
+}
+.na-panel.is-open { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+
+.na-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: var(--na-card-2);
+  border-bottom: 1px solid var(--na-border);
+}
+.na-title { font-weight: 700; font-size: 14px; }
+.na-x { background: transparent; color: var(--na-text-muted); border: 0; font-size: 18px; line-height: 1; padding: 6px; }
+.na-x:hover { color: var(--na-text); }
+
+.na-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.na-label { font-size: 12px; color: var(--na-text-muted); margin-bottom: 2px; }
+.na-input {
+  width: 100%; resize: vertical; min-height: 64px;
+  background: var(--na-input); color: var(--na-text);
+  border: 1px solid var(--na-border); border-radius: 10px; padding: 8px 10px; outline: none;
+}
+.na-input:focus { border-color: color-mix(in oklab, var(--na-border) 60%, var(--na-text) 40%); }
+.na-input.ghost { background: var(--na-input-ghost); }
+
+.na-err { margin-top: 2px; color: #ff6e6e; font-size: 12px; }
+
+.na-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.na-btn {
+  border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 13px;
+  border: 1px solid var(--na-border); background: var(--na-input-ghost); color: var(--na-text);
+}
+.na-btn:hover { filter: brightness(1.05); }
+.na-btn.solid {
+  background: var(--na-text); color: var(--na-ink); border-color: var(--na-text);
+}
+.na-btn.solid:hover { filter: none; opacity: .92; }
+.na-btn.ghost { background: transparent; color: var(--na-text-muted); }

@@ -1,5 +1,6 @@
 import "../css/Post.css";
 import Avatar from "./Avatar";
+import { getAuth } from "firebase/auth";
 
 type PostProps = {
     id: string;
@@ -10,9 +11,15 @@ type PostProps = {
     createdAt: string;
     likes: string[];
     commentsCount: number;
+    handleLikePost: (postId:string) => void;
 };
 
-export default function Post({ id, userId, userFullName, text, mediaUrl, createdAt, likes, commentsCount }: PostProps) {
+export default function Post({ id, userId, userFullName, text, mediaUrl, createdAt, likes, commentsCount, handleLikePost }: PostProps) {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    const currentUid = currentUser?.uid;
+    const alreadyLiked = currentUid ? likes.includes(currentUid) : false;
+    
   return (
     <div className="post-card">
       {/* Header */}
@@ -37,7 +44,13 @@ export default function Post({ id, userId, userFullName, text, mediaUrl, created
 
       {/* Footer */}
       <div className="post-footer">
-        <button className="post-like-btn">♡ Like</button>
+        <button
+          onClick={() => handleLikePost(id)}
+          className={`post-like-btn ${alreadyLiked ? "liked" : ""}`}
+        >
+          {alreadyLiked ? "♥" : "♡"} {likes.length} Like
+        </button>
+        {/* <span className="post-comments">{commentsCount} Comments</span> */}
       </div>
     </div>
   );

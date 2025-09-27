@@ -79,6 +79,25 @@ export default function Home() {
   }
 
   const handleLikePost = async(postId:string) => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const uid = user.uid;
+
+    setPosts((prevPosts) =>
+      prevPosts.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              likes: post.likes.includes(uid)
+                ? post.likes.filter((id) => id !== uid) 
+                : [...post.likes, uid],
+            }
+          : post
+      )
+    );
+
     try {
       const auth = getAuth();
       const user = auth.currentUser;
@@ -142,6 +161,7 @@ export default function Home() {
             createdAt={post.createdAt}
             likes={post.likes}
             commentsCount={post.commentsCount}
+            handleLikePost={handleLikePost}
           />
         ))}
     </main>

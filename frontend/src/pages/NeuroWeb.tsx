@@ -4,6 +4,7 @@ import { getAuth } from "firebase/auth";
 import { API_URL } from "../config";
 import Header from "../components/Header";
 import "../css/NeuroWeb.css";
+import NeuroAssistant from "../components/NeuroAssistant";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -508,6 +509,16 @@ export default function NeuroWeb() {
             </div>
           </div>
         </div>
+
+        <NeuroAssistant
+  followers={followers}
+  onFocusOccupation={(occ) => focusOccupation(occ)}
+  onSelectInterest={(interest) => {
+    if (interest) setSelectedInterest(interest);
+  }}
+  recruiterText=""
+/>
+
 
         {/* Right sidebar */}
         <aside className="neuroweb-aside">
