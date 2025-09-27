@@ -4,6 +4,7 @@ import { Navigate } from "react-router-dom";
 import "../css/Home.css";
 import Header from "../components/Header";
 import { fetchMe, type ProfileData } from "../userProfile";
+import NewPostPopUp from "../components/NewPostPopUp";
 
 export type Post = {
   id: string;
@@ -20,6 +21,7 @@ export default function Home() {
   const [firstName, setFirstName] = useState<string>("User");
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(true);
+  const [newPost, setNewPost] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -35,6 +37,10 @@ export default function Home() {
     })();
   }, []);
 
+  const handlePopUp = (close:boolean) => {
+    setNewPost(close)
+  }
+
   if (loading) {
     return (
       <div className="home-root">
@@ -48,12 +54,31 @@ export default function Home() {
   }
 
   return (
-    <div className="home-root">
-      <Header onSearch={(q: string) => setQuery(q)} />
-      <main className="home-main">
-        <h2 className="home-greeting">Welcome back, {firstName}</h2>
-        {query && <p className="home-query">Searching for: “{query}”</p>}
-      </main>
-    </div>
-  );
+  <div className="home-root">
+    <Header onSearch={(q: string) => setQuery(q)} />
+    <main className="home-main">
+      {query && <p className="home-query">Searching for: “{query}”</p>}
+
+      {/* Post creation card */}
+      <div className="create-post-card">
+        <div className="create-post-header">
+          <img
+            src="/img/avatar-placeholder.png"
+            alt="Your avatar"
+            className="create-post-avatar"
+          />
+          <button
+            className="create-post-trigger"
+            onClick={() => handlePopUp(true)}
+          >
+            Start a post
+          </button>
+        </div>
+      </div>
+    </main>
+    {newPost && (
+      <NewPostPopUp handlePopUp={handlePopUp} />
+    )}
+  </div>
+)
 }

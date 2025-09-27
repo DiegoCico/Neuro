@@ -17,6 +17,8 @@ from search import search_users
 from PIL import Image
 from face_store import save_face_enrollment
 
+import ai
+
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
 
 SERVICE_ACCOUNT_PATH = os.getenv(
@@ -31,7 +33,12 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": CORS_ORIGINS}})
+# CORS(app, resources={r"/*": {"origins": CORS_ORIGINS}})
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": CORS_ORIGINS,
+                             "allow_headers": ["Content-Type", "Authorization"],
+                             "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]}})
+
 
 @app.get("/")
 def health():
@@ -322,6 +329,52 @@ def api_profile_by_uid(uid: str):
     # Ensure slug is present/consistent like elsewhere
     user = profiles.ensure_user_slug(uid, user)
     return jsonify({"ok": True, "profile": user}), 200
+
+@app.route("/api/ai/suggest-reply", methods=["POST"])
+def suggest_reply():
+    """
+    POST /api/ai/suggest-reply
+    Headers: Authorization: Bearer <Firebase ID token>
+    Body:    { "partnerUid": "abc123" }
+    """
+    try:
+        me_uid = ai._require_auth()
+        print(f"[AI] Request from uid={me_uid}")
+
+        ai._rate_limit(me_uid)
+
+        body = request.get_json(silent=True) or {}
+        partner_uid = (body.get("partnerUid") or "").strip()
+        print(f"[AI] partnerUid={partner_uid!r}, body={body}")
+
+        if not partner_uid:
+            return jsonify({"ok": False, "error": "Missing partnerUid"}), 400
+
+        conv_id = ai._conv_id_for(me_uid, partner_uid)
+        msgs = ai._fetch_last_messages(conv_id, ai.MAX_MSGS)
+        print(f"[AI] conv_id={conv_id}, fetched {len(msgs)} msgs")
+
+        prompt = ai._build_prompt(msgs, me_uid)
+        print(f"[AI] prompt built (len={len(prompt)})")
+
+        reply = ai._call_gemini(prompt)
+        print(f"[AI] Gemini reply: {reply!r}")
+
+        return jsonify({"ok": True, "reply": reply})
+
+    except PermissionError as e:
+        print(f"[AI] Permission error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 401
+    except RuntimeError as e:
+        print(f"[AI] Runtime error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        print(f"[AI] Unexpected error: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": "Internal error"}), 500
+
+
 
 
 if __name__ == "__main__":

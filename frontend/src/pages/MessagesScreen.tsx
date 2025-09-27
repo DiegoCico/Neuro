@@ -1,13 +1,21 @@
+// src/pages/MessagesScreen.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import Header from "../components/Header";
 import { getAuth } from "firebase/auth";
-import { getFirestore, collection, doc, onSnapshot } from "firebase/firestore";
+import { getFirestore, collection, doc, onSnapshot, query, orderBy } from "firebase/firestore";
 import { API_URL } from "../config";
 import "../css/MessagesScreen.css";
 
 type SearchItem = { id: string; fullName: string; slug: string; avatarUrl?: string | null };
-type Msg = { id: string; from: string; to: string; text: string };
+type Msg = {
+  id: string;
+  from: string;
+  to: string;
+  text: string;
+  createdAt?: any;
+  createdAtMs?: number;
+};
 type PartnerProfile = { uid: string; fullName: string; avatarUrl?: string | null; slug?: string };
 
 function convIdFor(a: string, b: string) {
@@ -37,6 +45,7 @@ export default function MessagesScreen() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false); // NEW: AI button state
 
   // Thread ref for auto-scroll
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -81,38 +90,45 @@ export default function MessagesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myUid]);
 
-  // Hydrate partner UIDs => full profile
+  // Hydrate partner UIDs => full profile (parallelized)
   async function hydratePartners(uids: string[]) {
     try {
       const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const results: PartnerProfile[] = [];
-      for (const uid of uids) {
-        const r = await fetch(`${API_URL}/api/profile/by-uid/${uid}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!r.ok) continue;
-        const data = await r.json();
-        const p = data?.profile;
-        if (data?.ok && p) {
-          results.push({
-            uid,
-            fullName:
+      if (!token || !uids.length) return;
+
+      const results = await Promise.all(
+        uids.map(async (uid) => {
+          try {
+            const r = await fetch(`${API_URL}/api/profile/by-uid/${uid}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!r.ok) return null;
+            const data = await r.json();
+            const p = data?.profile;
+            if (!data?.ok || !p) return null;
+            const fullName =
               p.fullName ||
               [p.firstName, p.lastName].filter(Boolean).join(" ").trim() ||
+              uid;
+            return {
               uid,
-            avatarUrl: p.avatarUrl || null,
-            slug: p.slug,
-          });
-        }
-      }
-      setPartnerProfiles(results);
+              fullName,
+              avatarUrl: p.avatarUrl || null,
+              slug: p.slug,
+            } as PartnerProfile;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      setPartnerProfiles(results.filter(Boolean) as PartnerProfile[]);
     } catch (e) {
       console.error("hydratePartners error:", e);
     }
   }
 
-  // Live subscribe to current conversation
+  // Live subscribe to current conversation (ordered by time)
   useEffect(() => {
     if (!myUid || !peer) {
       setMsgs([]);
@@ -121,7 +137,10 @@ export default function MessagesScreen() {
     const db = getFirestore();
     const convRef = doc(collection(db, "conversations"), convIdFor(myUid, peer));
     const msgsCol = collection(convRef, "messages");
-    const unsub = onSnapshot(msgsCol, (snap) => {
+
+    const q = query(msgsCol, orderBy("createdAt", "asc"));
+
+    const unsub = onSnapshot(q, (snap) => {
       const next: Msg[] = [];
       snap.forEach((d) => next.push({ id: d.id, ...(d.data() as any) }));
       setMsgs(next);
@@ -132,8 +151,11 @@ export default function MessagesScreen() {
   // Auto-scroll to bottom whenever messages change or peer switches
   useEffect(() => {
     if (!threadRef.current) return;
-    // Scroll to bottom
-    threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    requestAnimationFrame(() => {
+      if (threadRef.current) {
+        threadRef.current.scrollTop = threadRef.current.scrollHeight;
+      }
+    });
   }, [msgs, peer]);
 
   // Debounced user search
@@ -205,6 +227,35 @@ export default function MessagesScreen() {
       console.error("send error:", e);
     } finally {
       setSending(false);
+    }
+  }
+
+  // NEW: one-click AI suggestion (fills input but does NOT send)
+  async function handleAISuggest() {
+    if (!peer || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch(`${API_URL}/api/ai/suggest-reply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ partnerUid: peer }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "AI failed");
+      const suggestion = (data.reply || "").trim();
+      if (suggestion) {
+        // If user already typed something, append with a space.
+        setText((prev) => (prev && prev.trim().length ? `${prev.trim()} ${suggestion}` : suggestion));
+      }
+    } catch (e) {
+      console.error("AI suggest error:", e);
+    } finally {
+      setAiBusy(false);
     }
   }
 
@@ -353,6 +404,17 @@ export default function MessagesScreen() {
                   placeholder="Write a message…"
                   disabled={!peer || sending}
                 />
+                {/* NEW: AI button (inserts suggestion, does not send) */}
+                <button
+                  className="ai-btn"
+                  type="button"
+                  onClick={handleAISuggest}
+                  disabled={!peer || aiBusy || sending}
+                  title="Suggest a reply"
+                >
+                  {aiBusy ? "AI…" : "AI"}
+                </button>
+
                 <button
                   className="send-btn"
                   onClick={handleSend}

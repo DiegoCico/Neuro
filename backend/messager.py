@@ -1,8 +1,9 @@
 # messagers.py
 from __future__ import annotations
 
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from datetime import datetime
 
 from firebase_admin import firestore
 
@@ -31,6 +32,14 @@ def _clean_text(s: str, max_len: int = 5000) -> str:
 def _ensure_participants(conv_ref, a: str, b: str) -> None:
     conv_ref.set({"participants": [a, b]}, merge=True)
 
+def _serialize_ts(ts: Optional[datetime]) -> Dict[str, Any]:
+    """Return dict with both ISO string and ms since epoch (if ts exists)."""
+    if not ts:
+        return {"createdAt": None, "createdAtMs": None}
+    # firestore returns a native datetime with tzinfo=UTC in Admin SDK
+    ms = int(ts.timestamp() * 1000)
+    return {"createdAt": ts.isoformat(), "createdAtMs": ms}
+
 # ----------------------------
 # Public API used by routers
 # ----------------------------
@@ -38,7 +47,7 @@ def _ensure_participants(conv_ref, a: str, b: str) -> None:
 def send_message(uid: str, to_uid: str, text: str) -> Dict[str, Any]:
     """
     Create (if needed) a conversation for (uid, to_uid) and append a message.
-    No timestamps are required. Realtime delivery comes from Firestore listeners.
+    Uses server timestamp so clients can order chronologically.
     Returns: { ok, conversationId, messageId }
     """
     uid = (uid or "").strip()
@@ -62,7 +71,7 @@ def send_message(uid: str, to_uid: str, text: str) -> Dict[str, Any]:
         "from": uid,
         "to": to_uid,
         "text": text,
-        # intentionally no timestamps/metadata per your requirement
+        "createdAt": firestore.SERVER_TIMESTAMP,  # ✅ server-side time
     })
 
     return {"ok": True, "conversationId": conv.id, "messageId": msg_ref.id}
@@ -70,9 +79,9 @@ def send_message(uid: str, to_uid: str, text: str) -> Dict[str, Any]:
 
 def get_thread(uid: str, other_uid: str, limit: int = 100) -> Dict[str, Any]:
     """
-    Fetch the messages in the 2-party conversation (uid, other_uid).
-    No ordering field is enforced (no timestamps) — Firestore returns by doc id.
-    Returns: { ok, conversationId, messages: [{id, from, to, text}, ...] }
+    Fetch the messages in the 2-party conversation (uid, other_uid),
+    ordered chronologically by createdAt (ascending).
+    Returns: { ok, conversationId, messages: [{id, from, to, text, createdAt, createdAtMs}, ...] }
     """
     uid = (uid or "").strip()
     other_uid = (other_uid or "").strip()
@@ -82,18 +91,41 @@ def get_thread(uid: str, other_uid: str, limit: int = 100) -> Dict[str, Any]:
         return {"ok": False, "error": "missing 'other_uid'"}
 
     conv = _conv_ref(uid, other_uid)
-    # Keep it simple: just read a page of messages.
-    snap = conv.collection("messages").limit(limit).get()
+    msgs_col = conv.collection("messages")
 
+    # Prefer server-side ordering; if the field is missing on legacy docs,
+    # fall back to fetching and sorting in Python.
     messages: List[Dict[str, Any]] = []
-    for d in snap:
-        doc = d.to_dict() or {}
-        messages.append({
-            "id": d.id,
-            "from": doc.get("from"),
-            "to": doc.get("to"),
-            "text": doc.get("text", ""),
-        })
+    try:
+        snap = msgs_col.order_by("createdAt", direction=firestore.Query.ASCENDING).limit(limit).get()
+        for d in snap:
+            doc = d.to_dict() or {}
+            ts = doc.get("createdAt")
+            ser = _serialize_ts(ts)
+            messages.append({
+                "id": d.id,
+                "from": doc.get("from"),
+                "to": doc.get("to"),
+                "text": doc.get("text", ""),
+                **ser,
+            })
+    except Exception:
+        # Fallback: no index / field missing — fetch & sort locally by createdAtMs then by id
+        snap = msgs_col.limit(limit).get()
+        tmp: List[Dict[str, Any]] = []
+        for d in snap:
+            doc = d.to_dict() or {}
+            ts = doc.get("createdAt")
+            ser = _serialize_ts(ts)
+            tmp.append({
+                "id": d.id,
+                "from": doc.get("from"),
+                "to": doc.get("to"),
+                "text": doc.get("text", ""),
+                **ser,
+            })
+        tmp.sort(key=lambda m: (m.get("createdAtMs") or 0, m["id"]))
+        messages = tmp
 
     return {"ok": True, "conversationId": conv.id, "messages": messages}
 
@@ -141,9 +173,9 @@ def seed_demo(requester_uid: str, a: str, b: str) -> Dict[str, Any]:
     _ensure_participants(conv, a, b)
 
     msgs = [
-        {"from": a, "to": b, "text": "Hey there!"},
-        {"from": b, "to": a, "text": "Yo! All good?"},
-        {"from": a, "to": b, "text": "Building the messenger 👨‍💻"},
+        {"from": a, "to": b, "text": "Hey there!", "createdAt": firestore.SERVER_TIMESTAMP},
+        {"from": b, "to": a, "text": "Yo! All good?", "createdAt": firestore.SERVER_TIMESTAMP},
+        {"from": a, "to": b, "text": "Building the messenger 👨‍💻", "createdAt": firestore.SERVER_TIMESTAMP},
     ]
 
     batch = _db().batch()
