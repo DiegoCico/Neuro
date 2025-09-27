@@ -9,6 +9,8 @@ import os
 
 import base64, io, numpy as np
 
+import messager as msgs
+
 import profiles_api as profiles
 from search import search_users
 
@@ -229,6 +231,98 @@ def get_profile_about(slug: str):
         return jsonify({"ok": True, "about": about, "uid": uid}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+    
+@app.post("/api/messages/send")
+def api_msg_send():
+    """POST body: { "to": "<otherUid>", "text": "<message>" }"""
+    uid = profiles.verify_bearer_uid(request.headers.get("Authorization"))
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    to_uid = (body.get("to") or "").strip()
+    text = (body.get("text") or "").strip()
+
+    try:
+        res = msgs.send_message(uid, to_uid, text)
+        if not res.get("ok"):
+            return jsonify(res), 400
+        return jsonify(res), 200
+    except LookupError:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": "internal"}), 500
+
+
+@app.get("/api/messages/with/<other_uid>")
+def api_msg_thread(other_uid: str):
+    """Retrieve the 2-party conversation with <other_uid>."""
+    uid = profiles.verify_bearer_uid(request.headers.get("Authorization"))
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    try:
+        res = msgs.get_thread(uid, other_uid)
+        if not res.get("ok"):
+            return jsonify(res), 400
+        return jsonify(res), 200
+    except LookupError:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    except Exception:
+        return jsonify({"ok": False, "error": "internal"}), 500
+
+
+@app.get("/api/messages/partners")
+def api_msg_partners():
+    """List UIDs the requester has conversations with."""
+    uid = profiles.verify_bearer_uid(request.headers.get("Authorization"))
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    try:
+        res = msgs.list_partners(uid)
+        if not res.get("ok"):
+            return jsonify(res), 400
+        return jsonify(res), 200
+    except Exception:
+        return jsonify({"ok": False, "error": "internal"}), 500
+
+
+@app.post("/api/messages/seed-demo")
+def api_msg_seed_demo():
+    """
+    Dev utility to seed a tiny back-and-forth:
+    POST body: { "a": "<uidA>", "b": "<uidB>" }
+    """
+    uid = profiles.verify_bearer_uid(request.headers.get("Authorization"))
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    a = (body.get("a") or "").strip()
+    b = (body.get("b") or "").strip()
+
+    try:
+        res = msgs.seed_demo(uid, a, b)
+        if not res.get("ok"):
+            return jsonify(res), 400
+        return jsonify(res), 200
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception:
+        return jsonify({"ok": False, "error": "internal"}), 500
+    
+@app.get("/api/profile/by-uid/<uid>")
+def api_profile_by_uid(uid: str):
+    user = profiles.get_user_by_uid(uid)
+    if not user:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    # Ensure slug is present/consistent like elsewhere
+    user = profiles.ensure_user_slug(uid, user)
+    return jsonify({"ok": True, "profile": user}), 200
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

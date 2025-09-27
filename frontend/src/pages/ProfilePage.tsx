@@ -134,6 +134,8 @@ export default function ProfilePage() {
   const [dirty, setDirty] = useState(false)
   const [hideMessage, setHideMessage] = useState(false)
 
+  const [isEditing, setIsEditing] = useState(false)
+
   // Tabs: render Experience only when tab === "Experience"
   const [tab, setTab] = useState<"About" | "Activity" | "Experience" | "Projects">("About");
 
@@ -286,6 +288,12 @@ export default function ProfilePage() {
     }
   }
 
+  const handleEdit = () => {
+    setIsEditing(true)
+    setDirty(true)
+    setTab('About')
+  }
+
   const updateProfile = async (
       title: string,
       bio: string,
@@ -370,7 +378,7 @@ export default function ProfilePage() {
               <div className="vp-aside-actions">
                 {isMine ? (
                   <>
-                    <button className="vp-btn primary" onClick={() => navigate("/settings/profile")}>
+                    <button className="vp-btn primary" onClick={() => handleEdit()}>
                       Edit Profile
                     </button>
                     <button
@@ -473,78 +481,95 @@ export default function ProfilePage() {
           <section className="vp-main">
             {tab === "About" && (
               <>
-                <h1
-                  className="vp-hero-title"
-                  contentEditable
-                  suppressContentEditableWarning
-                  onFocus={(e) => {
-                    if (!title) e.currentTarget.textContent = "";
-                  }}
-                  onBlur={(e) => {
-                    const val = e.currentTarget.textContent?.trim() || "";
-                    setTitle(val);
-                    setDirty(true)
-                    if (!val) e.currentTarget.textContent = "Add your title...";
-                  }}
-                >
-                  {title || "Add your title..."}
-                </h1>
-
-                <p
-                  className="vp-hero-sub editable"
-                  contentEditable
-                  suppressContentEditableWarning
-                  onFocus={(e) => {
-                    if (!bio) e.currentTarget.textContent = "";
-                  }}
-                  onBlur={(e) => {
-                    const val = e.currentTarget.textContent?.trim() || "";
-                    setBio(val);
-                    setDirty(true)
-                    if (!val) e.currentTarget.textContent = "Add your bio...";
-                  }}
-                >
-                  {bio || "Add your bio..."}
-                </p>
-
-                <div className="vp-section">
-                  <h2 className="vp-h2">Current Focus</h2>
-                  <p
-                    className="vp-copy editable"
+                {isMine && isEditing ? (
+                  <h1
+                    className="vp-hero-title"
                     contentEditable
                     suppressContentEditableWarning
                     onFocus={(e) => {
-                      if (!currentFocus) e.currentTarget.textContent = "";
+                      if (!title) e.currentTarget.textContent = "";
                     }}
                     onBlur={(e) => {
                       const val = e.currentTarget.textContent?.trim() || "";
-                      setCurrentFocus(val);
+                      setTitle(val);
                       setDirty(true)
-                      if (!val) e.currentTarget.textContent = "Add your current focus...";
+                      if (!val) e.currentTarget.textContent = "Add your title...";
                     }}
                   >
-                    {currentFocus || "Add your current focus..."}
+                    {title || "Add your title..."}
+                  </h1>
+                    
+                ) : (
+                  <h1 className="vp-hero-title">{title}</h1>
+                )}
+
+                {isMine && isEditing ? (
+                  <p
+                    className="vp-hero-sub editable"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onFocus={(e) => {
+                      if (!bio) e.currentTarget.textContent = "";
+                    }}
+                    onBlur={(e) => {
+                      const val = e.currentTarget.textContent?.trim() || "";
+                      setBio(val);
+                      setDirty(true)
+                      if (!val) e.currentTarget.textContent = "Add your bio...";
+                    }}
+                  >
+                    {bio || "Add your bio..."}
                   </p>
+                ) : (
+                  <p className="vp-hero-sub">{bio}</p>
+                )}
+
+                <div className="vp-section">
+                  <h2 className="vp-h2">Current Focus</h2>
+                  {isMine && isEditing ? (
+                    <p
+                      className="vp-copy editable"
+                      contentEditable
+                      suppressContentEditableWarning
+                      onFocus={(e) => {
+                        if (!currentFocus) e.currentTarget.textContent = "";
+                      }}
+                      onBlur={(e) => {
+                        const val = e.currentTarget.textContent?.trim() || "";
+                        setCurrentFocus(val);
+                        setDirty(true)
+                        if (!val) e.currentTarget.textContent = "Add your current focus...";
+                      }}
+                    >
+                      {currentFocus || "Add your current focus..."}
+                    </p>
+                  ) : (
+                    <p className="vp-copy">{currentFocus}</p>
+                  )}
                 </div>
 
                 <div className="vp-section">
                   <h2 className="vp-h2">Beyond Work</h2>
-                  <p
-                    className="vp-copy editable"
-                    contentEditable
-                    suppressContentEditableWarning
-                    onFocus={(e) => {
-                      if (!beyondWork) e.currentTarget.textContent = "";
-                    }}
-                    onBlur={(e) => {
-                      const val = e.currentTarget.textContent?.trim() || "";
-                      setBeyondWork(val);
-                      setDirty(true)
-                      if (!val) e.currentTarget.textContent = "Add your beyond work...";
-                    }}
-                  >
-                    {beyondWork || "Add your beyond work..."}
-                  </p>
+                  {isMine && isEditing ? (
+                    <p
+                      className="vp-copy editable"
+                      contentEditable
+                      suppressContentEditableWarning
+                      onFocus={(e) => {
+                        if (!beyondWork) e.currentTarget.textContent = "";
+                      }}
+                      onBlur={(e) => {
+                        const val = e.currentTarget.textContent?.trim() || "";
+                        setBeyondWork(val);
+                        setDirty(true)
+                        if (!val) e.currentTarget.textContent = "Add your beyond work...";
+                      }}
+                    >
+                      {beyondWork || "Add your beyond work..."}
+                    </p>
+                  ) : (
+                    <p className="vp-copy">{beyondWork}</p>
+                  )}
                 </div>
 
                 <div className="vp-section">
@@ -586,7 +611,6 @@ export default function ProfilePage() {
                           setSaved(true);
                           setDirty(false);
 
-                          // fade out after 2.2s, remove after 3s
                           setTimeout(() => setHideMessage(true), 2200);
                           setTimeout(() => {
                             setSaved(false);
@@ -608,7 +632,6 @@ export default function ProfilePage() {
                 </div>
               )}
 
-                {/* Show confirmation button after save */}
                 {saved && (
                   <div style={{ marginTop: "1rem" }} className={`fade-message ${hideMessage ? "hidden" : ""}`}>
                     <button className="primary" disabled>

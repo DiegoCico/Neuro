@@ -8,6 +8,7 @@ import FaceSetup from "./pages/FaceSetup";
 import Onboarding from "./pages/Onboarding";
 import RequireAuth from "./components/RequireAuth";
 import ProfilePage, { RedirectToMyProfile } from "./pages/ProfilePage";
+import MessagesScreen from "./pages/MessagesScreen";
 
 export default function App() {
   return (
@@ -53,6 +54,14 @@ export default function App() {
         element={
           <RequireAuth>
             <ProfilePage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/messages"
+        element={
+          <RequireAuth>
+            <MessagesScreen />
           </RequireAuth>
         }
       />

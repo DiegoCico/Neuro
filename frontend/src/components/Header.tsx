@@ -1,6 +1,6 @@
 // src/components/Header.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import NeuroLogo from "./NeuroLogo";
 import ProfileDropdown from "./ProfileDropdown";
 import { fetchMe, type ProfileData } from "../userProfile";
@@ -91,6 +91,9 @@ export default function Header({ onSearch }: Props) {
 
   const [networkOpen, setNetworkOpen] = useState(false)
   const networkRef = useRef<HTMLDivElement | null>(null)
+
+  const loc = useLocation();
+
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -332,7 +335,12 @@ export default function Header({ onSearch }: Props) {
           <IconBell />
           <span className="badge" aria-hidden>3</span>
         </button>
-        <button className="icon-btn" aria-label="Messages" type="button">
+        <button
+          className={`icon-btn ${loc.pathname.startsWith("/messages") ? "is-active" : ""}`}
+          aria-label="Messages"
+          type="button"
+          onClick={() => navigate("/messages")}
+        >
           <IconChat />
           <span className="badge" aria-hidden>2</span>
         </button>
