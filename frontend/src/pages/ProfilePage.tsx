@@ -12,6 +12,9 @@ import {
   type ProfileData,
   type FollowersDetail,
 } from "../userProfile";
+import { API_URL } from "../config";
+// import { getAuth } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 
 // Lazy-load Experience so it only bundles & fetches after user clicks the tab
 const ExperienceSection = lazy(() => import("../components/ExperienceSection"));
@@ -125,9 +128,11 @@ export default function ProfilePage() {
   const [bio, setBio] = useState('')
   const [currentFocus, setCurrentFocus] = useState('')
   const [beyondWork, setBeyondWork] = useState('')
+  const [about, setAbout] = useState<any>({})
 
   const [saved, setSaved] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [hideMessage, setHideMessage] = useState(false)
 
   // Tabs: render Experience only when tab === "Experience"
   const [tab, setTab] = useState<"About" | "Activity" | "Experience" | "Projects">("About");
@@ -146,9 +151,20 @@ export default function ProfilePage() {
         if (slug) {
           try {
             const u = await fetchUserBySlug(slug.toLowerCase());
-            const exp = await fetchExperienceBySlug(slug.toLowerCase())
-            if (alive) setProfile(u);
-            console.log(exp)
+            if (alive) {
+              setProfile(u);
+
+              const res = await fetch(`${API_URL}/api/profile/about/${slug}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (alive) setAbout(data.about || {});
+                console.log(data.about)
+                setTitle(data.about.title)
+                setBio(data.about.bio)
+                setCurrentFocus(data.about.currentFocus)
+                setBeyondWork(data.about.beyondWork)
+              }
+            }
           } catch {
             if (alive) setNotFound(true);
           }
@@ -156,7 +172,22 @@ export default function ProfilePage() {
           if (!me) {
             if (alive) setAuthRequired(true);
           } else {
-            if (alive) setProfile(me);
+            if (alive) {
+              setProfile(me);
+
+              const auth = getAuth();
+              const user = auth.currentUser;
+              if (user) {
+                const token = await user.getIdToken();
+                const res = await fetch(`${API_URL}/api/profile/about/${me.slug}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  if (alive) setAbout(data.about || {});
+                }
+              }
+            } 
           }
         }
       } finally {
@@ -254,6 +285,51 @@ export default function ProfilePage() {
       }
     }
   }
+
+  const updateProfile = async (
+      title: string,
+      bio: string,
+      currentFocus: string,
+      beyondWork: string
+    ): Promise<boolean> => {
+      try {
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user) {
+          console.error("Not logged in");
+          return false;
+        }
+
+        const token = await user.getIdToken();
+
+        const res = await fetch(`${API_URL}/api/profile/about`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title,
+            bio,
+            currentFocus,
+            beyondWork,
+          }),
+        });
+
+        if (!res.ok) {
+          console.error("Failed to update profile:", await res.text());
+          return false;
+        }
+
+        const data = await res.json();
+        console.log("Profile update response:", data);
+
+        return data.ok === true;
+      } catch (err) {
+        console.error("Error updating profile:", err);
+        return false;
+      }
+    }
 
   return (
     <>
@@ -424,6 +500,7 @@ export default function ProfilePage() {
                   onBlur={(e) => {
                     const val = e.currentTarget.textContent?.trim() || "";
                     setBio(val);
+                    setDirty(true)
                     if (!val) e.currentTarget.textContent = "Add your bio...";
                   }}
                 >
@@ -442,6 +519,7 @@ export default function ProfilePage() {
                     onBlur={(e) => {
                       const val = e.currentTarget.textContent?.trim() || "";
                       setCurrentFocus(val);
+                      setDirty(true)
                       if (!val) e.currentTarget.textContent = "Add your current focus...";
                     }}
                   >
@@ -461,6 +539,7 @@ export default function ProfilePage() {
                     onBlur={(e) => {
                       const val = e.currentTarget.textContent?.trim() || "";
                       setBeyondWork(val);
+                      setDirty(true)
                       if (!val) e.currentTarget.textContent = "Add your beyond work...";
                     }}
                   >
@@ -471,7 +550,7 @@ export default function ProfilePage() {
                 <div className="vp-section">
                   <h2 className="vp-h2">Recent Highlights</h2>
 
-                  <div className="vp-highlight">
+                  {/* <div className="vp-highlight">
                     <div className="vp-highlight-title">GenAI Pipeline Optimization</div>
                     <div className="vp-highlight-sub">
                       Architected and implemented a scalable contract processing pipeline using AWS services, reducing
@@ -493,33 +572,45 @@ export default function ProfilePage() {
                       Regular hackathon participant focused on creating intuitive interfaces that bridge the gap between
                       complex backend systems and user-friendly experiences.
                     </div>
-                  </div>
+                  </div> */}
                 </div>
 
-                {dirty && !saved && (
-                  <div style={{ marginTop: "1rem" }}>
+                {dirty && (
+                <div style={{ marginTop: "1rem" }}>
+                  {!saved ? (
                     <button
                       className="primary"
-                      onClick={() => {
-                        console.log({
-                          title,
-                          bio,
-                          currentFocus,
-                          beyondWork,
-                        });
-                        setSaved(true);
-                        setDirty(false); // clear dirty since it's saved
-                        setTimeout(() => setSaved(false), 3000);
+                      onClick={async () => {
+                        const ok = await updateProfile(title, bio, currentFocus, beyondWork);
+                        if (ok) {
+                          setSaved(true);
+                          setDirty(false);
+
+                          // fade out after 2.2s, remove after 3s
+                          setTimeout(() => setHideMessage(true), 2200);
+                          setTimeout(() => {
+                            setSaved(false);
+                            setHideMessage(false);
+                          }, 3000);
+                        }
                       }}
                     >
                       Save
                     </button>
-                  </div>
-                )}
+                  ) : (
+                    <button
+                      className={`primary ${hideMessage ? "fade-out" : ""}`}
+                      disabled
+                    >
+                      Profile updated
+                    </button>
+                  )}
+                </div>
+              )}
 
                 {/* Show confirmation button after save */}
                 {saved && (
-                  <div style={{ marginTop: "1rem" }}>
+                  <div style={{ marginTop: "1rem" }} className={`fade-message ${hideMessage ? "hidden" : ""}`}>
                     <button className="primary" disabled>
                       Profile updated
                     </button>

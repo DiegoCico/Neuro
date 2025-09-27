@@ -265,3 +265,12 @@ body:has(.header) .vp-root { padding-top: clamp(16px, 3vh, 28px); }
   border-radius: 999px;
 }
 .vp-modal-body { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+.fade-message {
+  opacity: 1;
+  transition: opacity 0.8s ease-out;
+}
+
+.fade-message.hidden {
+  opacity: 0;
+}

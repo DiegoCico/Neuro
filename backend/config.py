@@ -175,6 +175,60 @@ def api_delete_my_experience(exp_id: str):
     ref.delete()
     return jsonify({"ok": True})
 
+@app.get("/api/profile/me")
+def api_profile_me():
+    uid = profiles.verify_bearer_uid(request.headers.get('Authorization'))
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    
+    user = profiles.get_user_by_uid(uid)
+    if not user:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    
+    user = profiles.ensure_user_slug(uid, user)
+    return jsonify({"ok": True, "profile": user}), 200
+
+@app.get("/api/profile/by-slug/<slug>")
+def api_profile_by_slug(slug: str):
+    user = profiles.get_user_by_slug(slug or "")
+    if not user:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    return jsonify({"ok": True, "profile": user}), 200
+
+@app.post("/api/profile/about")
+def update_profile_about():
+    auth_header = request.headers.get("Authorization")
+    uid = profiles.verify_bearer_uid(auth_header)
+    if not uid:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    about = {
+        "title": data.get("title", "").strip(),
+        "bio": data.get("bio", "").strip(),
+        "currentFocus": data.get("currentFocus", "").strip(),
+        "beyondWork": data.get("beyondWork", "").strip(),
+    }
+
+    # Save into Firestore as a sub-document
+    profiles._get_user_doc(uid).collection("about").document("main").set(about, merge=True)
+
+    return jsonify({"ok": True, "about": about}), 200
+
+@app.get("/api/profile/about/<slug>")
+def get_profile_about(slug: str):
+    try:
+        user = profiles.get_user_by_slug(slug)
+        if not user:
+            return jsonify({"ok": False, "error": "not found"}), 404
+
+        uid = user["id"]
+        doc = profiles._get_user_doc(uid).collection("about").document("main").get()
+        about = doc.to_dict() if doc.exists else {}
+
+        return jsonify({"ok": True, "about": about, "uid": uid}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
