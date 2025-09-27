@@ -1,0 +1,61 @@
+    .face-setup-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: black;
+  color: white;
+}
+
+.circle-wrapper {
+  position: relative;
+  width: 300px;
+  height: 300px;
+}
+
+.webcam-feed {
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.circle-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 300px;
+  height: 300px;
+  pointer-events: none;
+}
+
+.controls {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.btn {
+  padding: 10px 20px;
+  margin: 5px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.start-btn {
+  background: #2563eb;
+  color: white;
+}
+
+.stop-btn {
+  background: #dc2626;
+  color: white;
+}
+
+.warning-text {
+  color: red;
+  font-weight: bold;
+  margin-top: 10px;
+}

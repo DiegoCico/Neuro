@@ -1,7 +1,7 @@
-// src/lib/firebase.ts
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
-// Optional analytics (guarded so it won't break in unsupported envs)
+import { getFirestore } from "firebase/firestore";   // ✅ Firestore
+// Optional analytics
 import { getAnalytics, isSupported } from "firebase/analytics";
 
 const firebaseConfig = {
@@ -14,12 +14,18 @@ const firebaseConfig = {
   measurementId: "G-TDRDCQ4TSF",
 };
 
+// Init app
 export const app = initializeApp(firebaseConfig);
+
+// Auth
 export const auth = getAuth(app);
 
 // Providers
 export const googleProvider = new GoogleAuthProvider();
 export const githubProvider = new GithubAuthProvider();
+
+// Firestore database
+export const db = getFirestore(app);
 
 // (Optional) Analytics
 isSupported()

@@ -1,0 +1,125 @@
+/* src/css/ProfileDropdown.css */
+
+.pd-wrap {
+  position: relative;
+}
+
+.pd-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 999px;
+  line-height: 0;
+}
+
+.pd-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: min(360px, 92vw);
+  background: var(--card, #111);
+  color: var(--text, #eee);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 14px;
+  box-shadow:
+    0 12px 28px rgba(0,0,0,.35),
+    0 2px 6px rgba(0,0,0,.2);
+  overflow: hidden;
+  z-index: 1000;
+}
+
+/* little spacing system */
+.pd-menu .pd-section,
+.pd-menu .pd-header { padding: 14px; }
+
+.pd-header {
+  display: grid;
+  gap: 6px;
+  background: color-mix(in oklab, var(--card, #111) 90%, #fff 10%);
+  border-bottom: 1px solid var(--border, #2a2a2a);
+}
+
+.pd-name { font-weight: 800; letter-spacing: 0.2px; }
+.pd-subtitle { opacity: .8; font-size: .92rem; line-height: 1.35; }
+
+.pd-primary {
+  margin-top: 4px;
+  width: 100%;
+  border: 1px solid var(--border, #2a2a2a);
+  background: transparent;
+  color: var(--text, #eee);
+  padding: 10px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pd-primary:hover { background: color-mix(in oklab, var(--card, #111) 70%, #fff 30%); }
+
+.pd-title {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: .7;
+  margin-bottom: 8px;
+}
+
+.pd-item {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.pd-item:hover { background: color-mix(in oklab, var(--card, #111) 70%, #fff 30%); }
+
+.pd-appearance {
+  display: flex;
+  gap: 8px;
+}
+
+.pd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #2a2a2a);
+  cursor: pointer;
+  user-select: none;
+}
+.pd-chip input { display: none; }
+.pd-chip.is-active {
+  background: color-mix(in oklab, var(--card, #111) 65%, #fff 35%);
+}
+
+.pd-signout {
+  display: block;
+  width: calc(100% - 28px);
+  margin: 8px auto 14px;
+  border: 0;
+  border-top: 1px solid var(--border, #2a2a2a);
+  padding-top: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pd-signout:hover { opacity: .9; }
+
+/* Light/Dark base tokens (black & white theme focus) */
+:root[data-theme="light"] {
+  --card: #fff;
+  --text: #111;
+  --border: #e6e6e6;
+}
+:root[data-theme="dark"] {
+  --card: #0f1113;
+  --text: #f2f3f5;
+  --border: #262a2f;
+}
