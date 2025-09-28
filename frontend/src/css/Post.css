@@ -112,3 +112,24 @@
 .post-like-btn.liked {
   color: red; /* highlight liked posts */
 }
+
+.post-mini-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* avatar left, date right */
+  margin-bottom: 0.5rem;
+}
+
+.post-mini-date {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.post-mini-card {
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 0;
+}
+
+.post-mini-card:last-child {
+  border-bottom: none; /* no divider after last post */
+}

@@ -433,9 +433,13 @@ def create_post():
 @app.route('/api/posts', methods=['GET'])
 def fetch_posts():
     try:
+        user_id = request.args.get("userId")
         post_ref = db.collection('posts')
 
-        docs = post_ref.stream()
+        if user_id:
+            docs = post_ref.where("userId", "==", user_id).stream()
+        else:
+            docs = post_ref.stream()
 
         posts = []
         for doc in docs:

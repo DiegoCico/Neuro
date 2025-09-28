@@ -18,6 +18,7 @@ export type ProfileData = {
   fullName?: string;
   headline?: string;
   location?: string;
+  occupation?: string;
   avatarUrl?: string;
   bio?: string;
   slug?: string;

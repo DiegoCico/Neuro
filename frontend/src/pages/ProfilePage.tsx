@@ -15,6 +15,7 @@ import {
 import { API_URL } from "../config";
 // import { getAuth } from "firebase/auth";
 import { getAuth } from "firebase/auth";
+import PostMini from "../components/PostMini";
 
 // Lazy-load Experience so it only bundles & fetches after user clicks the tab
 const ExperienceSection = lazy(() => import("../components/ExperienceSection"));
@@ -108,6 +109,18 @@ function FollowToggle({
   );
 }
 
+export type PostData = {
+  id: string;
+  userId: string;
+  userFullName: string;
+  text?: string;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  createdAt: string;
+  likes: string[];
+  commentsCount: number;
+};  
+
 /* ---------- page ---------- */
 export default function ProfilePage() {
   const { slug } = useParams<{ slug?: string }>();
@@ -135,9 +148,34 @@ export default function ProfilePage() {
   const [hideMessage, setHideMessage] = useState(false)
 
   const [isEditing, setIsEditing] = useState(false)
+  const [posts, setPosts] = useState<PostData[]>([])
 
   // Tabs: render Experience only when tab === "Experience"
   const [tab, setTab] = useState<"About" | "Activity" | "Experience" | "Projects">("About");
+
+  useEffect(() => {
+    async function fetchPosts() {
+      try {
+        if (profile) {
+          const res = await fetch(`${API_URL}/api/posts?userId=${profile.id}`)
+          const data = await res.json()
+          if (data.ok) {
+            console.log(data)
+            setPosts(data.posts)
+          } else {
+            console.error('Failed to fetch', data.error)
+          }
+        } else {
+          console.log('Profile not found')
+          return
+        }
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+      }
+    }
+
+    fetchPosts()
+  }, [profile])
 
   // Initial load: fetch viewer & target profile
   useEffect(() => {
@@ -154,23 +192,17 @@ export default function ProfilePage() {
           try {
             const u = await fetchUserBySlug(slug.toLowerCase());
             if (alive) {
-              setProfile(u);
-              console.log('U', u)
-              setTitle(data.about.title)
-              setBio(data.about.bio)
-              setCurrentFocus(data.about.currentFocus)
-              setBeyondWork(data.about.beyondWork)
+              setProfile(u)
+              setTitle(u.occupation || "")
+              setBio(u.bio || "")
+            }
 
-              const res = await fetch(`${API_URL}/api/profile/about/${slug}`);
-              if (res.ok) {
-                const data = await res.json();
-                if (alive) setAbout(data.about || {});
-                console.log(data.about)
-                setTitle(data.about.title)
-                setBio(data.about.bio)
-                setCurrentFocus(data.about.currentFocus)
-                setBeyondWork(data.about.beyondWork)
-              }
+            const res = await fetch(`${API_URL}/api/profile/about/${slug}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (alive) setAbout(data.about || {});
+              setCurrentFocus(data.about?.currentFocus || "")
+              setBeyondWork(data.about?.beyondWork || "")
             }
           } catch {
             if (alive) setNotFound(true);
@@ -476,7 +508,6 @@ export default function ProfilePage() {
               </nav>
 
               <div className="vp-aside-links">
-                <a href="https://www.linkedin.com/in/diego-cicotoste/" target="_blank" rel="noreferrer">LinkedIn</a>
                 <a href="https://github.com/DiegoCico" target="_blank" rel="noreferrer">GitHub</a>
               </div>
             </div>
@@ -650,7 +681,19 @@ export default function ProfilePage() {
             {tab === "Activity" && (
               <div className="vp-section">
                 <h2 className="vp-h2">Activity</h2>
-                <p className="vp-copy">Coming soon.</p>
+                {posts.map((post) => (
+                  <PostMini
+                    key={post.id}
+                    id={post.id}
+                    userId={post.userId}
+                    userFullName={post.userFullName}
+                    text={post.text}
+                    mediaUrl={post.mediaUrl}
+                    createdAt={post.createdAt}
+                    likes={post.likes}
+                    commentsCount={post.commentsCount}
+                  />
+                ))}
               </div>
             )}
 
