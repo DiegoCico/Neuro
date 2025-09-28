@@ -322,14 +322,6 @@ export default function NeuroAssistant({
             onChange={(e) => setPrompt(e.target.value)}
             rows={3}
           />
-          <label className="na-label" style={{ marginTop: 8 }}>Recruiter’s note (optional)</label>
-          <textarea
-            className="na-input ghost"
-            placeholder="Paste the JD blurb or recruiter message here…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-          />
           {err && <div className="na-err">{err}</div>}
 
           <div className="na-actions">

@@ -8,6 +8,7 @@ import NewPostPopUp from "../components/NewPostPopUp";
 import Post from "../components/Post";
 import { API_URL } from "../config";
 import { getAuth } from "firebase/auth";
+import Avatar from "../components/Avatar"
 
 export type PostData = {
   id: string;
@@ -28,12 +29,13 @@ export default function Home() {
   const [authorized, setAuthorized] = useState(true);
   const [newPost, setNewPost] = useState(false)
   const [posts, setPosts] = useState<PostData[]>([])
+  const [activeTab, setActiveTab] = useState<"quickconnect" | "posts">("posts")
 
   useEffect(() => {
     (async () => {
       try {
         const data: ProfileData = await fetchMe();
-        if (data?.firstName) setFirstName(data.firstName);
+        if (data?.fullName) setFirstName(data.fullName);
         setAuthorized(true);
       } catch {
         setAuthorized(false);
@@ -129,45 +131,73 @@ export default function Home() {
   }
 
   return (
-  <div className="home-root">
-    <Header onSearch={(q: string) => setQuery(q)} />
-    <main className="home-main">
-      {query && <p className="home-query">Searching for: “{query}”</p>}
+    <div className="home-root">
+        <Header onSearch={(q: string) => setQuery(q)} />
+        <main className="home-main">
+          {/* Sidebar */}
+          <div className="left-col">
+            <div className="sidebar">
+              <button
+                className={`sidebar-btn ${
+                  activeTab === "quickconnect" ? "active" : ""
+                }`}
+                onClick={() => setActiveTab("quickconnect")}
+              >
+                Quick Connect
+              </button>
+              <button
+                className={`sidebar-btn ${activeTab === "posts" ? "active" : ""}`}
+                onClick={() => setActiveTab("posts")}
+              >
+                Posts
+              </button>
+            </div>
+          </div>
 
-      {/* Post creation card */}
-      <div className="create-post-card">
-        <div className="create-post-header">
-          <img
-            src="/img/avatar-placeholder.png"
-            alt="Your avatar"
-            className="create-post-avatar"
-          />
-          <button
-            className="create-post-trigger"
-            onClick={() => handlePopUp(true)}
-          >
-            Start a post
-          </button>
-        </div>
+          {/* Right content */}
+          <div className="right-col">
+            {activeTab === "quickconnect" && (
+              <div className="quick-connect">
+                <h2>Quick Connect</h2>
+                
+              </div>
+            )}
+
+            {activeTab === "posts" && (
+              <>
+                {query && (
+                  <p className="home-query">Searching for: “{query}”</p>
+                )}
+                <div className="create-post-card">
+                  <div className="create-post-header">
+                    <Avatar name={firstName} size={32} />
+                    <button
+                      className="create-post-trigger"
+                      onClick={() => handlePopUp(true)}
+                    >
+                      Start a post
+                    </button>
+                  </div>
+                </div>
+                {posts.map((post) => (
+                  <Post
+                    key={post.id}
+                    id={post.id}
+                    userId={post.userId}
+                    userFullName={post.userFullName}
+                    text={post.text}
+                    mediaUrl={post.mediaUrl}
+                    createdAt={post.createdAt}
+                    likes={post.likes}
+                    commentsCount={post.commentsCount}
+                    handleLikePost={handleLikePost}
+                  />
+                ))}
+              </>
+            )}
+          </div>
+        </main>
+        {newPost && <NewPostPopUp handlePopUp={handlePopUp} />}
       </div>
-      {posts.map((post) => (
-          <Post
-            key={post.id}
-            id={post.id}
-            userId={post.userId}
-            userFullName={post.userFullName}
-            text={post.text}
-            mediaUrl={post.mediaUrl}
-            createdAt={post.createdAt}
-            likes={post.likes}
-            commentsCount={post.commentsCount}
-            handleLikePost={handleLikePost}
-          />
-        ))}
-    </main>
-    {newPost && (
-      <NewPostPopUp handlePopUp={handlePopUp} />
-    )}
-  </div>
-)
+    )
 }

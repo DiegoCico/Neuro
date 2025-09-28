@@ -1,10 +1,18 @@
+/* ==========================================================================
+   NeuroAssistant — Full CSS
+   - Edge-tight placement with safe-area awareness
+   - Light/Dark theming with fallbacks
+   - Compact panel + FAB
+   - Reduced motion & accessibility niceties
+   ========================================================================== */
+
 :root {
   color-scheme: light dark;
 }
 
 /* ---------- Variable fallbacks (used only if your app hasn't defined them) ---------- */
 .na-scope {
-  /* fallbacks */
+  /* Base palette (dark by default) */
   --na-card: var(--card, #111);
   --na-border: var(--border, #2a2a2a);
   --na-text: var(--text, #eaeaea);
@@ -16,6 +24,18 @@
   --na-input-ghost: color-mix(in oklab, var(--na-card) 95%, #fff 5%);
   --na-ink: #111;
   --na-ink-contrast: #fff;
+
+  /* Spacing/placement */
+  --na-offset: 8px; /* tweak per-screen via .edge-tight or inline style */
+  --na-radius: 16px;
+
+  /* Typography scale */
+  --na-fz-xs: 12px;
+  --na-fz-sm: 13px;
+  --na-fz-md: 14px;
+
+  /* Z-stack */
+  --na-z: 2147483000; /* high but below modals if you need */
 }
 
 /* Optional: explicit overrides if your theme toggler sets data-theme on <html> or <body> */
@@ -53,18 +73,29 @@
   }
 }
 
-/* ---------- Component styles ---------- */
+/* ---------- Root / Placement ---------- */
 .na-scope {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
+  position: fixed; /* stick to viewport */
+  right: calc(env(safe-area-inset-right, 0px) + var(--na-offset));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--na-offset));
   display: grid;
   gap: 8px;
   pointer-events: none; /* children re-enable */
-  z-index: 24;          /* or set inline via style if you prefer */
+  z-index: var(--na-z);
 }
 
-/* FAB */
+/* Modifiers for placement */
+.na-scope.edge-tight { --na-offset: 4px; }
+.na-scope.edge-comfy { --na-offset: 12px; }
+
+/* Left-side variant if you need it */
+.na-scope.left {
+  left: calc(env(safe-area-inset-left, 0px) + var(--na-offset));
+  right: auto;
+  transform-origin: 0% 100%;
+}
+
+/* ---------- Floating Action Button (FAB) ---------- */
 .na-fab {
   width: 52px; height: 52px; border-radius: 50%;
   background: var(--na-ink);
@@ -72,58 +103,158 @@
   border: 1px solid var(--na-border);
   display: flex; align-items: center; justify-content: center;
   box-shadow: var(--na-elev);
-  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease, opacity .18s ease;
   pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 .na-fab:hover { transform: translateY(-1px); box-shadow: var(--na-elev-hover); }
 .na-fab:active { transform: translateY(0); }
+.na-fab:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--na-text) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
 .na-fab-icon { font-weight: 800; font-size: 13px; letter-spacing: .5px; }
 
-/* Panel */
+/* ---------- Panel ---------- */
 .na-panel {
   width: min(520px, 52vw);
   max-height: min(70vh, 520px);
   background: var(--na-card);
   color: var(--na-text);
   border: 1px solid var(--na-border);
-  border-radius: 16px;
+  border-radius: var(--na-radius);
   overflow: hidden;
   transform-origin: 100% 100%;
   transform: scale(.85) translateY(8px);
   opacity: 0; pointer-events: none;
-  transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .22s ease;
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .22s ease, box-shadow .22s ease;
+  box-shadow: var(--na-elev);
 }
-.na-panel.is-open { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+.na-scope.left .na-panel { transform-origin: 0% 100%; }
+.na-panel.is-open { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; box-shadow: var(--na-elev-hover); }
 
+/* Optional scrim if you want one (hidden by default) */
+.na-scrim {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.3);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+  z-index: calc(var(--na-z) - 1);
+}
+.na-scrim.is-open { opacity: 1; pointer-events: auto; }
+
+/* ---------- Panel sections ---------- */
 .na-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; background: var(--na-card-2);
   border-bottom: 1px solid var(--na-border);
 }
-.na-title { font-weight: 700; font-size: 14px; }
-.na-x { background: transparent; color: var(--na-text-muted); border: 0; font-size: 18px; line-height: 1; padding: 6px; }
-.na-x:hover { color: var(--na-text); }
+.na-title { font-weight: 700; font-size: var(--na-fz-md); }
 
-.na-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.na-label { font-size: 12px; color: var(--na-text-muted); margin-bottom: 2px; }
+.na-x {
+  background: transparent; color: var(--na-text-muted);
+  border: 0; font-size: 18px; line-height: 1; padding: 6px;
+  cursor: pointer; border-radius: 8px; pointer-events: auto;
+}
+.na-x:hover { color: var(--na-text); background: color-mix(in oklab, var(--na-card) 88%, #fff 12%); }
+.na-x:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--na-text) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.na-body {
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.na-label {
+  font-size: var(--na-fz-xs);
+  color: var(--na-text-muted);
+  margin-bottom: 2px;
+}
 .na-input {
   width: 100%; resize: vertical; min-height: 64px;
   background: var(--na-input); color: var(--na-text);
-  border: 1px solid var(--na-border); border-radius: 10px; padding: 8px 10px; outline: none;
+  border: 1px solid var(--na-border); border-radius: 10px;
+  padding: 8px 10px; outline: none;
+  font-size: var(--na-fz-sm);
 }
-.na-input:focus { border-color: color-mix(in oklab, var(--na-border) 60%, var(--na-text) 40%); }
 .na-input.ghost { background: var(--na-input-ghost); }
+.na-input:focus {
+  border-color: color-mix(in oklab, var(--na-border) 60%, var(--na-text) 40%);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--na-text) 15%, transparent);
+}
 
-.na-err { margin-top: 2px; color: #ff6e6e; font-size: 12px; }
+.na-err { margin-top: 2px; color: #ff6e6e; font-size: var(--na-fz-xs); }
 
-.na-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+/* ---------- Actions ---------- */
+.na-actions {
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px;
+}
 .na-btn {
-  border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 13px;
-  border: 1px solid var(--na-border); background: var(--na-input-ghost); color: var(--na-text);
+  border-radius: 10px; padding: 8px 12px;
+  font-weight: 600; font-size: var(--na-fz-sm);
+  border: 1px solid var(--na-border);
+  background: var(--na-input-ghost); color: var(--na-text);
+  cursor: pointer; pointer-events: auto;
+  transition: filter .14s ease, opacity .14s ease, transform .14s ease, background .14s ease;
 }
 .na-btn:hover { filter: brightness(1.05); }
+.na-btn:active { transform: translateY(0.5px); }
+.na-btn:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--na-text) 70%, transparent);
+  outline-offset: 2px;
+}
 .na-btn.solid {
   background: var(--na-text); color: var(--na-ink); border-color: var(--na-text);
 }
 .na-btn.solid:hover { filter: none; opacity: .92; }
 .na-btn.ghost { background: transparent; color: var(--na-text-muted); }
+.na-btn.ghost:hover { color: var(--na-text); }
+
+/* ---------- Helpers ---------- */
+.na-row { display: flex; gap: 8px; align-items: center; }
+.na-col { display: flex; flex-direction: column; gap: 8px; }
+.na-muted { color: var(--na-text-muted); font-size: var(--na-fz-xs); }
+
+/* ---------- Mobile tweaks ---------- */
+@media (max-width: 640px) {
+  .na-scope { --na-offset: 6px; }
+  .na-panel { width: min(560px, 92vw); max-height: min(78vh, 560px); }
+  .na-fab { width: 50px; height: 50px; }
+}
+
+/* ---------- Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .na-panel,
+  .na-fab,
+  .na-scrim {
+    transition: none !important;
+  }
+}
+
+/* ---------- High-contrast adjustment (optional) ---------- */
+@media (prefers-contrast: more) {
+  .na-scope {
+    --na-border: color-mix(in oklab, var(--na-text) 25%, #000 75%);
+    --na-text-muted: color-mix(in oklab, var(--na-text) 75%, transparent);
+  }
+  .na-btn.solid { opacity: 1; }
+}
+
+/* ---------- Optional: Scrollbar styling inside panel ---------- */
+.na-panel ::-webkit-scrollbar { width: 10px; height: 10px; }
+.na-panel ::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--na-text) 18%, transparent);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.na-panel ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Optional: Utility class to hide panel without unmount ---------- */
+.na-hidden { display: none !important; }
+
+/* ---------- (If you render the assistant at the left edge) ---------- */
+.na-scope.left .na-panel.is-open { transform: scale(1) translateY(0); }

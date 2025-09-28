@@ -1,5 +1,6 @@
 # app.py
 from __future__ import annotations
+from typing import List
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -8,6 +9,7 @@ from firebase_admin import credentials, firestore
 import os
 
 import base64, io, numpy as np
+from pyparsing import Any, Dict, Optional
 
 import network
 import messager as msgs
@@ -135,6 +137,13 @@ def enroll_face():
 
     result = save_face_enrollment(uid, frames)
     return jsonify(result), (200 if result.get("ok") else 400)
+
+@app.post("/api/recognize-face")
+def recognize_face():
+    data = request.get_json(silent=True) or {}
+    image_data = data.get('image')
+    if not image_data:
+        return jsonify({"ok": False, "error": "No image provided"}), 400
 
 @app.get("/api/users/<slug>/experience")
 def api_list_experience(slug: str):
@@ -490,7 +499,145 @@ def get_followers():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to load followers: {e}"}), 500
 
+@app.route("/api/ai/gemini/neuro-search", methods=["POST"])
+def gemini_neuro_search():
+    # Auth + rate limit
+    try:
+        uid, _ = network.verify_token(request)
+        network._rate_limit(uid)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 401
 
+    # Read request
+    try:
+        body = request.get_json(force=True) or {}
+    except Exception:
+        body = {}
+    prompt_text: str = (body.get("prompt") or "").strip()
+    recruiter_text: str = (body.get("recruiterText") or "").strip()
+    ctx = body.get("context") or {}
+
+    # Normalize context: occupations + interestsByOcc
+    occs = list(ctx.get("occupations") or [])
+    # Frontend sends interestsByOcc as: { "Occ": [{label, count}, ...], ... }
+    raw_map = ctx.get("interestsByOcc") or {}
+    interests_by_occ: Dict[str, List[Dict[str, Any]]] = {}
+    if isinstance(raw_map, dict):
+        for k, v in raw_map.items():
+            if isinstance(v, list):
+                cleaned = []
+                for it in v:
+                    if isinstance(it, dict) and "label" in it:
+                        cleaned.append({"label": str(it["label"]), "count": int(it.get("count", 1))})
+                interests_by_occ[str(k)] = cleaned
+
+    # Build strict JSON instruction
+    sys_prompt = f"""
+You analyze a recruiter's brief and a free-form prompt, then choose the SINGLE best (occupation, interest) pair.
+
+Return STRICT JSON with this shape (and nothing else, no markdown code blocks):
+
+{{
+  "occupation": "string",     // one of the provided occupations if possible; else a close match
+  "interest": "string|null",  // one of the common interests under that occupation if possible
+  "reason": "string",         // brief explanation of why this pairing matches the prompt
+  "candidates": [             // optional short list of alternates
+    {{ "label": "string", "score": 0.0 }}
+  ]
+}}
+
+Guidelines:
+- Prefer occupations from this list when relevant: {occs}
+- Prefer interests from this map when relevant (top items are most popular): { {k: [it['label'] for it in (interests_by_occ.get(k) or [])[:8]] for k in occs} }
+- If unclear, pick the most reasonable occupation and set a general interest like "General".
+- Keep strings short; no extra commentary.
+    """.strip()
+
+    full_prompt = f"""{sys_prompt}
+
+PROMPT:
+{prompt_text or "(none)"}
+
+RECRUITER NOTES:
+{recruiter_text or "(none)"}
+""".strip()
+
+    # Try Gemini JSON
+    result: Optional[dict] = None
+    try:
+        result = network._call_gemini_json(full_prompt)
+    except Exception as e:
+        # SDK missing or API error; fall back locally
+        print(f"[neuro-search] Gemini call failed early: {e}")
+
+    # Validate/clean the model output
+    occupation = None
+    interest = None
+    reason = None
+    candidates: List[Dict[str, Any]] = []
+
+    if isinstance(result, dict):
+        occupation = result.get("occupation")
+        interest = result.get("interest")
+        reason = result.get("reason")
+        cand = result.get("candidates")
+        if isinstance(cand, list):
+            for c in cand[:8]:
+                if isinstance(c, dict) and "label" in c:
+                    candidates.append({
+                        "label": str(c["label"]),
+                        "score": float(c.get("score", 0.0))
+                    })
+
+    # If missing or clearly unusable, run local fallback
+    if not occupation:
+        local_pick = network._local_match(prompt_text, recruiter_text, occs, interests_by_occ)
+        if local_pick:
+            occupation, interest_local, occ_scores = local_pick
+            if not interest and interest_local:
+                interest = interest_local
+            # Build candidate list from top-3 occ scores
+            top = sorted(occ_scores.items(), key=lambda x: x[1], reverse=True)[:3]
+            candidates = [{"label": k, "score": float(v)} for k, v in top]
+            reason = reason or "Selected via local semantic match over occupations and common interests."
+        else:
+            # Total failure → last-resort generic
+            occupation = occs[0] if occs else "Software Engineer"
+            interest = interest or "General"
+            reason = reason or "Defaulted due to insufficient context."
+
+    # Snap occupation to closest known occupation if possible
+    if occupation and occs:
+        # Exact
+        if occupation not in occs:
+            # Case-insensitive snap
+            lower_map = {o.lower(): o for o in occs}
+            if occupation.lower() in lower_map:
+                occupation = lower_map[occupation.lower()]
+            else:
+                # prefix or contains match
+                best = None
+                best_len = 1e9
+                for o in occs:
+                    if occupation.lower() in o.lower() or o.lower() in occupation.lower():
+                        if len(o) < best_len:
+                            best_len = len(o)
+                            best = o
+                if best:
+                    occupation = best
+
+    # If interest missing, pick the top interest for that occupation
+    if not interest and occupation and occupation in interests_by_occ and interests_by_occ[occupation]:
+        interest = interests_by_occ[occupation][0]["label"]
+
+    # Final payload
+    payload = {
+        "occupation": occupation,
+        "interest": interest,
+        "reason": reason or "Matched using model output.",
+        "candidates": candidates[:8],
+    }
+    return jsonify(payload), 200
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
