@@ -25,6 +25,8 @@ import automation
 
 from datetime import datetime, timezone
 
+import github_integration as github
+
 import ai
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
@@ -46,7 +48,6 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": CORS_ORIGINS,
                              "allow_headers": ["Content-Type", "Authorization"],
                              "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]}})
-
 
 @app.get("/")
 def health():
@@ -794,6 +795,46 @@ def adk_analyze():
     # ------------------------------------------------------------------------------
 
     return jsonify({"ok": True, **result})
+
+
+@app.get("/api/github/repos")
+def public_repos():
+    """
+    Public-only GitHub repos (no OAuth). One of:
+      - ?username=<github_login>
+      - ?slug=<profileSlug>  (we'll resolve to a stored github username)
+
+    Optional:
+      - ?limit=5  (1..10)
+    """
+    username = (request.args.get("username") or "").strip()
+    slug = (request.args.get("slug") or "").strip().lower()
+
+    # Limit clamp
+    try:
+        limit = int(request.args.get("limit") or "5")
+    except Exception:
+        limit = 5
+    limit = max(1, min(limit, 10))
+
+    if not username and slug:
+        prof = github._profile_by_slug(slug)
+        if not prof:
+            # Profile missing; do not error hard — mirror frontend expectation
+            return jsonify({"ok": True, "repos": []})
+        username = github._extract_github_username_from_profile(prof) or ""
+
+    if not username:
+        # Nothing to fetch — frontend can prompt for username
+        return jsonify({"ok": True, "repos": []})
+
+    repos, err = github._gh_get_user_repos(username, limit)
+    if err:
+        # Non-fatal error: return empty with message for debugging if needed
+        return jsonify({"ok": True, "repos": [], "note": err})
+
+    return jsonify({"ok": True, "repos": repos})
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

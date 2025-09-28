@@ -154,6 +154,14 @@ export default function FaceSetup() {
                     height: 300
                 })
                 camera.start()
+
+                return () => {
+                    camera.stop()
+                    if (videoElement.srcObject) {
+                        const tracks = (videoElement.srcObject as MediaStream).getTracks()
+                        tracks.forEach((track) => track.stop())
+                    }
+                }
             }
         }
     }, [webCamRef])

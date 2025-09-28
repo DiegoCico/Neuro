@@ -93,13 +93,15 @@ def save_face_enrollment(uid: str, frames: List[Dict[str, Any]]) -> Dict[str, An
 
     # 3) Average & store the master embedding
     final_emb = np.mean(np.vstack(enc_list), axis=0).tolist()
-    face_doc.set({
-        "embeddings": final_emb,        
-        "allEmbeddings": [vec.tolist() for vec in enc_list], 
-        "vectorDims": len(final_emb),
-        "frameCount": saved_frames,
-        "updatedAt": _utc_now(),
-    }, merge=True)
+    face_doc.set(
+        {
+            "embeddings": final_emb,
+            "vectorDims": len(final_emb),
+            "frameCount": saved_frames,
+            "updatedAt": _utc_now(),
+        },
+        merge=True,
+    )
 
     return {
         "ok": True,
@@ -123,7 +125,7 @@ def detect_face(image_data, db):
     query_vec = encs[0]
 
     # Fetch enrolled faces
-    db = firestore.client()
+    # db = firestore.client()
     docs = list(db.collection("face").stream())
 
     if not docs:
@@ -133,13 +135,9 @@ def detect_face(image_data, db):
     best_dist = float("inf")
 
     for doc in docs:
-        data = doc.to_dict()
-        if not data:
-            continue
-        emb = data.get("embeddings")
+        emb = doc.to_dict().get('embeddings')
         if not emb:
             continue
-
         stored_vec = np.array(emb)
         dist = np.linalg.norm(query_vec - stored_vec)
         if dist < best_dist:

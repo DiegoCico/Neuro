@@ -7,13 +7,11 @@ import {
   fetchMe,
   fetchUserBySlug,
   followBySlug,
-  fetchExperienceBySlug,
   unfollowBySlug,
   type ProfileData,
   type FollowersDetail,
 } from "../userProfile";
 import { API_URL } from "../config";
-// import { getAuth } from "firebase/auth";
 import { getAuth } from "firebase/auth";
 import PostMini from "../components/PostMini";
 
@@ -119,7 +117,211 @@ export type PostData = {
   createdAt: string;
   likes: string[];
   commentsCount: number;
-};  
+};
+
+/* ---------- GitHub section ---------- */
+type GhRepo = {
+  id: number | string;
+  name: string;
+  html_url: string;
+  description?: string | null;
+  stargazers_count?: number;
+  forks_count?: number;
+  language?: string | null;
+  updated_at?: string;
+  private?: boolean;
+  archived?: boolean;
+};
+
+function timeAgo(iso?: string) {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const s = Math.max(1, Math.floor((now - then) / 1000));
+  const units: [number, string][] = [
+    [60, "sec"],
+    [60, "min"],
+    [24, "hr"],
+    [7, "day"],
+    [4.345, "wk"],
+    [12, "mo"],
+    [Number.POSITIVE_INFINITY, "yr"],
+  ];
+  let val = s;
+  let label = "sec";
+  for (let i = 0; i < units.length; i++) {
+    const [step, name] = units[i];
+    if (val < step) {
+      label = name;
+      break;
+    }
+    val = Math.floor(val / step);
+    label = name;
+  }
+  return `${val} ${label}${val > 1 ? "s" : ""} ago`;
+}
+
+/** Extract username if profile already has it somewhere (optional convenience) */
+function pickGithubUsername(profile?: ProfileData | null): string | null {
+  if (!profile) return null;
+  const nested = (profile as any)?.github?.username;
+  if (typeof nested === "string" && nested.trim()) return nested.trim();
+  const flat = (profile as any)?.githubUsername;
+  if (typeof flat === "string" && flat.trim()) return flat.trim();
+  const links = (profile as any)?.links;
+  const ghUrl = links?.github;
+  if (typeof ghUrl === "string" && ghUrl.trim()) {
+    const m = ghUrl.match(/github\.com\/([^/?#]+)/i);
+    if (m?.[1]) return m[1];
+  }
+  const social = (profile as any)?.social;
+  const socialGh = social?.github;
+  if (typeof socialGh === "string" && socialGh.trim()) return socialGh.trim();
+  return null;
+}
+
+function GitHubProjects({
+  isMine,
+  profileSlug,
+  initialUsername,
+  active,
+}: {
+  isMine: boolean;
+  profileSlug: string;
+  initialUsername?: string | null;
+  active: boolean;
+}) {
+  const [repos, setRepos] = useState<GhRepo[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // input state + chosen username to fetch
+  const [ghInput, setGhInput] = useState<string>(initialUsername || "");
+  const [chosenUser, setChosenUser] = useState<string | null>(initialUsername || null);
+
+  const fetchRepos = async (usernameOrSlug: { username?: string; slug?: string }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("limit", "5");
+      if (usernameOrSlug.username) qs.set("username", usernameOrSlug.username);
+      if (usernameOrSlug.slug) qs.set("slug", usernameOrSlug.slug);
+
+      const res = await fetch(`${API_URL}/api/github/repos?${qs.toString()}`);
+      const data = await res.json().catch(() => ({} as any));
+      if (!data?.ok) throw new Error(data?.error || "Failed to load GitHub repos");
+
+      const items: GhRepo[] = (data.repos || [])
+        .slice(0, 5)
+        .sort((a: GhRepo, b: GhRepo) => {
+          const ta = new Date(a.updated_at || 0).getTime();
+          const tb = new Date(b.updated_at || 0).getTime();
+          return tb - ta;
+        });
+
+      setRepos(items);
+    } catch (e: any) {
+      setError(e?.message || "Something went wrong");
+      setRepos(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // auto-load on first open (if we already have a username), or by slug otherwise
+  useEffect(() => {
+    if (!active) return;
+    if (chosenUser && chosenUser.trim()) {
+      void fetchRepos({ username: chosenUser.trim() });
+    } else {
+      // no username yet — try by profile slug (backend may resolve a default)
+      void fetchRepos({ slug: profileSlug });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, chosenUser, profileSlug]);
+
+  function handleGo() {
+    const val = ghInput.trim();
+    if (!val) return;
+    setChosenUser(val);
+  }
+
+  return (
+    <div className="vp-section">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <h2 className="vp-h2" style={{ margin: 0 }}>Projects</h2>
+
+        {/* Inline GitHub username box (always visible to owner; visible to others only if empty for clarity) */}
+        {(isMine || !chosenUser) && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              className="vp-input"
+              placeholder="GitHub username"
+              value={ghInput}
+              onChange={(e) => setGhInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleGo();
+              }}
+              style={{ minWidth: 220 }}
+              aria-label="GitHub username"
+            />
+            <button className="vp-btn primary" onClick={handleGo} disabled={loading || !ghInput.trim()}>
+              {chosenUser ? "Update" : "Go"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {chosenUser && (
+        <div className="vp-copy" style={{ marginTop: 6 }}>
+          Showing public repos for <strong>{chosenUser}</strong>
+        </div>
+      )}
+
+      {loading && (
+        <>
+          <div className="vp-skel-line" style={{ width: "60%" }} />
+          <div className="vp-skel-line" style={{ width: "55%" }} />
+          <div className="vp-skel-line" style={{ width: "45%" }} />
+        </>
+      )}
+
+      {!loading && error && (
+        <div className="vp-copy" style={{ color: "var(--danger, #f66)" }}>
+          {error}
+        </div>
+      )}
+
+      {!loading && repos && repos.length === 0 && (
+        <p className="vp-copy">No public repositories to show.</p>
+      )}
+
+      {!loading && repos && repos.length > 0 && (
+        <ul className="vp-list gap">
+          {repos.map((r) => (
+            <li key={r.id} className="vp-card repo-row">
+              <div className="repo-head">
+                <a className="repo-name" href={r.html_url} target="_blank" rel="noreferrer" title={r.name}>
+                  {r.name}
+                </a>
+                {r.private ? <span className="repo-badge">Private</span> : null}
+                {r.archived ? <span className="repo-badge">Archived</span> : null}
+              </div>
+              {r.description ? <div className="repo-desc">{r.description}</div> : null}
+              <div className="repo-meta">
+                {typeof r.stargazers_count === "number" && <span title="Stars">⭐ {r.stargazers_count}</span>}
+                {typeof r.forks_count === "number" && <span title="Forks">🍴 {r.forks_count}</span>}
+                {r.language && <span className="repo-lang">{r.language}</span>}
+                {r.updated_at && <span className="repo-updated">Updated {timeAgo(r.updated_at)}</span>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /* ---------- page ---------- */
 export default function ProfilePage() {
@@ -137,18 +339,18 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState<number>(0);
   const [followersDetails, setFollowersDetails] = useState<FollowersDetail[]>([]);
 
-  const [title, setTitle] = useState('')
-  const [bio, setBio] = useState('')
-  const [currentFocus, setCurrentFocus] = useState('')
-  const [beyondWork, setBeyondWork] = useState('')
-  const [about, setAbout] = useState<any>({})
+  const [title, setTitle] = useState("");
+  const [bio, setBio] = useState("");
+  const [currentFocus, setCurrentFocus] = useState("");
+  const [beyondWork, setBeyondWork] = useState("");
+  const [about, setAbout] = useState<any>({});
 
-  const [saved, setSaved] = useState(false)
-  const [dirty, setDirty] = useState(false)
-  const [hideMessage, setHideMessage] = useState(false)
+  const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [hideMessage, setHideMessage] = useState(false);
 
-  const [isEditing, setIsEditing] = useState(false)
-  const [posts, setPosts] = useState<PostData[]>([])
+  const [isEditing, setIsEditing] = useState(false);
+  const [posts, setPosts] = useState<PostData[]>([]);
 
   // Tabs: render Experience only when tab === "Experience"
   const [tab, setTab] = useState<"About" | "Activity" | "Experience" | "Projects">("About");
@@ -157,25 +359,20 @@ export default function ProfilePage() {
     async function fetchPosts() {
       try {
         if (profile) {
-          const res = await fetch(`${API_URL}/api/posts?userId=${profile.id}`)
-          const data = await res.json()
+          const res = await fetch(`${API_URL}/api/posts?userId=${profile.id}`);
+          const data = await res.json();
           if (data.ok) {
-            console.log(data)
-            setPosts(data.posts)
+            setPosts(data.posts);
           } else {
-            console.error('Failed to fetch', data.error)
+            console.error("Failed to fetch", data.error);
           }
-        } else {
-          console.log('Profile not found')
-          return
         }
       } catch (error) {
         console.error("Error fetching posts:", error);
       }
     }
-
-    fetchPosts()
-  }, [profile])
+    fetchPosts();
+  }, [profile]);
 
   // Initial load: fetch viewer & target profile
   useEffect(() => {
@@ -192,17 +389,17 @@ export default function ProfilePage() {
           try {
             const u = await fetchUserBySlug(slug.toLowerCase());
             if (alive) {
-              setProfile(u)
-              setTitle(u.occupation || "")
-              setBio(u.bio || "")
+              setProfile(u);
+              setTitle(u.occupation || "");
+              setBio(u.bio || "");
             }
 
             const res = await fetch(`${API_URL}/api/profile/about/${slug}`);
             if (res.ok) {
               const data = await res.json();
               if (alive) setAbout(data.about || {});
-              setCurrentFocus(data.about?.currentFocus || "")
-              setBeyondWork(data.about?.beyondWork || "")
+              setCurrentFocus(data.about?.currentFocus || "");
+              setBeyondWork(data.about?.beyondWork || "");
             }
           } catch {
             if (alive) setNotFound(true);
@@ -226,7 +423,7 @@ export default function ProfilePage() {
                   if (alive) setAbout(data.about || {});
                 }
               }
-            } 
+            }
           }
         }
       } finally {
@@ -249,7 +446,6 @@ export default function ProfilePage() {
 
     const initFollowers = (profile.followersCount ?? profile.stats?.followers ?? 0) || 0;
     setFollowersCount(initFollowers);
-
     setFollowersDetails(Array.isArray(profile.followersDetails) ? profile.followersDetails : []);
 
     const followingList: string[] = (viewer?.following as string[] | undefined) ?? [];
@@ -285,7 +481,9 @@ export default function ProfilePage() {
               <h1 className="vp-h2">User not found</h1>
               <p className="vp-copy">We couldn’t find that profile.</p>
               <div style={{ marginTop: 12 }}>
-                <Link className="vp-btn" to="/home">Go Home</Link>
+                <Link className="vp-btn" to="/home">
+                  Go Home
+                </Link>
               </div>
             </div>
           </section>
@@ -326,55 +524,55 @@ export default function ProfilePage() {
   }
 
   const handleEdit = () => {
-    setIsEditing(true)
-    setDirty(true)
-    setTab('About')
-  }
+    setIsEditing(true);
+    setDirty(true);
+    setTab("About");
+  };
 
   const updateProfile = async (
-      title: string,
-      bio: string,
-      currentFocus: string,
-      beyondWork: string
-    ): Promise<boolean> => {
-      try {
-        const auth = getAuth();
-        const user = auth.currentUser;
-        if (!user) {
-          console.error("Not logged in");
-          return false;
-        }
-
-        const token = await user.getIdToken();
-
-        const res = await fetch(`${API_URL}/api/profile/about`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            title,
-            bio,
-            currentFocus,
-            beyondWork,
-          }),
-        });
-
-        if (!res.ok) {
-          console.error("Failed to update profile:", await res.text());
-          return false;
-        }
-
-        const data = await res.json();
-        console.log("Profile update response:", data);
-
-        return data.ok === true;
-      } catch (err) {
-        console.error("Error updating profile:", err);
+    title: string,
+    bio: string,
+    currentFocus: string,
+    beyondWork: string
+  ): Promise<boolean> => {
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) {
+        console.error("Not logged in");
         return false;
       }
+
+      const token = await user.getIdToken();
+
+      const res = await fetch(`${API_URL}/api/profile/about`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title,
+          bio,
+          currentFocus,
+          beyondWork,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("Failed to update profile:", await res.text());
+        return false;
+      }
+
+      const data = await res.json();
+      return data.ok === true;
+    } catch (err) {
+      console.error("Error updating profile:", err);
+      return false;
     }
+  };
+
+  const initialGithubUsername = pickGithubUsername(profile);
 
   return (
     <>
@@ -528,13 +726,12 @@ export default function ProfilePage() {
                     onBlur={(e) => {
                       const val = e.currentTarget.textContent?.trim() || "";
                       setTitle(val);
-                      setDirty(true)
+                      setDirty(true);
                       if (!val) e.currentTarget.textContent = "Add your title...";
                     }}
                   >
                     {title || "Add your title..."}
                   </h1>
-                    
                 ) : (
                   <h1 className="vp-hero-title">{title}</h1>
                 )}
@@ -550,7 +747,7 @@ export default function ProfilePage() {
                     onBlur={(e) => {
                       const val = e.currentTarget.textContent?.trim() || "";
                       setBio(val);
-                      setDirty(true)
+                      setDirty(true);
                       if (!val) e.currentTarget.textContent = "Add your bio...";
                     }}
                   >
@@ -573,7 +770,7 @@ export default function ProfilePage() {
                       onBlur={(e) => {
                         const val = e.currentTarget.textContent?.trim() || "";
                         setCurrentFocus(val);
-                        setDirty(true)
+                        setDirty(true);
                         if (!val) e.currentTarget.textContent = "Add your current focus...";
                       }}
                     >
@@ -597,7 +794,7 @@ export default function ProfilePage() {
                       onBlur={(e) => {
                         const val = e.currentTarget.textContent?.trim() || "";
                         setBeyondWork(val);
-                        setDirty(true)
+                        setDirty(true);
                         if (!val) e.currentTarget.textContent = "Add your beyond work...";
                       }}
                     >
@@ -610,63 +807,36 @@ export default function ProfilePage() {
 
                 <div className="vp-section">
                   <h2 className="vp-h2">Recent Highlights</h2>
-
-                  {/* <div className="vp-highlight">
-                    <div className="vp-highlight-title">GenAI Pipeline Optimization</div>
-                    <div className="vp-highlight-sub">
-                      Architected and implemented a scalable contract processing pipeline using AWS services, reducing
-                      processing time by 50% and improving system reliability.
-                    </div>
-                  </div>
-
-                  <div className="vp-highlight">
-                    <div className="vp-highlight-title">Multi-Million Row ETL</div>
-                    <div className="vp-highlight-sub">
-                      Designed efficient data transformation processes handling massive datasets while maintaining sub-second
-                      query response times.
-                    </div>
-                  </div>
-
-                  <div className="vp-highlight">
-                    <div className="vp-highlight-title">UI/UX Innovation</div>
-                    <div className="vp-highlight-sub">
-                      Regular hackathon participant focused on creating intuitive interfaces that bridge the gap between
-                      complex backend systems and user-friendly experiences.
-                    </div>
-                  </div> */}
                 </div>
 
                 {dirty && (
-                <div style={{ marginTop: "1rem" }}>
-                  {!saved ? (
-                    <button
-                      className="primary"
-                      onClick={async () => {
-                        const ok = await updateProfile(title, bio, currentFocus, beyondWork);
-                        if (ok) {
-                          setSaved(true);
-                          setDirty(false);
+                  <div style={{ marginTop: "1rem" }}>
+                    {!saved ? (
+                      <button
+                        className="primary"
+                        onClick={async () => {
+                          const ok = await updateProfile(title, bio, currentFocus, beyondWork);
+                          if (ok) {
+                            setSaved(true);
+                            setDirty(false);
 
-                          setTimeout(() => setHideMessage(true), 2200);
-                          setTimeout(() => {
-                            setSaved(false);
-                            setHideMessage(false);
-                          }, 3000);
-                        }
-                      }}
-                    >
-                      Save
-                    </button>
-                  ) : (
-                    <button
-                      className={`primary ${hideMessage ? "fade-out" : ""}`}
-                      disabled
-                    >
-                      Profile updated
-                    </button>
-                  )}
-                </div>
-              )}
+                            setTimeout(() => setHideMessage(true), 2200);
+                            setTimeout(() => {
+                              setSaved(false);
+                              setHideMessage(false);
+                            }, 3000);
+                          }
+                        }}
+                      >
+                        Save
+                      </button>
+                    ) : (
+                      <button className={`primary ${hideMessage ? "fade-out" : ""}`} disabled>
+                        Profile updated
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {saved && (
                   <div style={{ marginTop: "1rem" }} className={`fade-message ${hideMessage ? "hidden" : ""}`}>
@@ -700,27 +870,25 @@ export default function ProfilePage() {
             {tab === "Experience" && (
               <Suspense
                 fallback={
-                    <div className="vp-section">
-                      <h2 className="vp-h2">Experience</h2>
-                      <div className="vp-skel-line" style={{ width: "60%" }} />
-                      <div className="vp-skel-line" style={{ width: "50%" }} />
-                      <div className="vp-skel-line" style={{ width: "40%" }} />
-                    </div>
+                  <div className="vp-section">
+                    <h2 className="vp-h2">Experience</h2>
+                    <div className="vp-skel-line" style={{ width: "60%" }} />
+                    <div className="vp-skel-line" style={{ width: "50%" }} />
+                    <div className="vp-skel-line" style={{ width: "40%" }} />
+                  </div>
                 }
               >
-                <ExperienceSection
-                    profileSlug={profileSlug}
-                    isMine={isMine}
-                  />
-
+                <ExperienceSection profileSlug={profileSlug} isMine={isMine} />
               </Suspense>
             )}
 
             {tab === "Projects" && (
-              <div className="vp-section">
-                <h2 className="vp-h2">Projects</h2>
-                <p className="vp-copy">Coming soon.</p>
-              </div>
+              <GitHubProjects
+                isMine={isMine}
+                profileSlug={profileSlug}
+                initialUsername={initialGithubUsername}
+                active={tab === "Projects"}
+              />
             )}
           </section>
         </section>

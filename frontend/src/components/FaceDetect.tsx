@@ -62,6 +62,15 @@ export default function FaceDetect() {
         height: 400,
         })
         camera.start()
+
+        return () => {
+            camera.stop()
+
+            if (videoElement.srcObject) {
+            const tracks = (videoElement.srcObject as MediaStream).getTracks()
+            tracks.forEach((track) => track.stop())
+            }
+        }
     }, [webCamRef])
 
     useEffect(() => {
@@ -80,6 +89,7 @@ export default function FaceDetect() {
             })
             const data = await res.json()
             setResult(data)
+            console.log(data)
             } catch {
             setResult({ ok: false, error: "Network error" })
             }
