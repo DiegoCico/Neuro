@@ -1,14 +1,12 @@
-/* FaceSetup.css — theme-aware, matches your token system */
-
 /* Container */
 .face-setup-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 
-  height: 100vh;
-  padding: 24px;
+  min-height: 100vh;
+  padding: 32px 20px;
 
   background: var(--bg);
   color: var(--text);
@@ -16,116 +14,111 @@
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* Smooth progress animation */
-circle {
-  transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
-}
-
-/* Webcam within a circular frame + SVG overlay */
+/* Webcam + overlay */
 .circle-wrapper {
   position: relative;
-  width: 450px;
-  height: 450px;
+  width: 420px;
+  height: 420px;
 }
 
 .webcam-feed {
-  width: 450px;
-  height: 450px;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid var(--border);
-  box-shadow: 0 8px 30px var(--ring);
+  border: 3px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
   background: var(--surface);
 }
 
+/* Circular progress overlay */
 .circle-overlay {
   position: absolute;
   inset: 0;
-  width: 450px;
-  height: 450px;
   pointer-events: none;
 }
 
-/* Background ring uses border color; progress uses brand */
-.circle-overlay .bg-ring {
+circle {
+  transition: stroke-dashoffset 0.5s ease;
+}
+
+.bg-ring {
   stroke: var(--border);
+  opacity: 0.6;
 }
 
-.circle-overlay .progress-ring {
+.progress-ring {
   stroke: var(--brand);
+  filter: drop-shadow(0 0 6px var(--brand));
 }
 
-/* Controls */
+/* Controls wrapper */
 .controls {
-  margin-top: 20px;
+  margin-top: 28px;
+  width: 100%;
+  max-width: 480px;
   text-align: center;
-  width: min(560px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 /* Buttons */
 .btn {
-  padding: 12px 16px;
-  margin: 8px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 12px 20px;
+  border-radius: 12px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  background: var(--surface);
-  color: var(--text);
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+  border: none;
+  transition: all 0.2s ease;
 }
 
-.btn:hover {
-  transform: translateY(-1px);
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--ring);
-}
-
-/* Primary (Start / Continue) maps to brand */
 .start-btn {
   background: var(--brand);
-  border-color: var(--brand);
   color: var(--bg);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
 }
 
 .start-btn:hover {
-  filter: brightness(0.92);
+  filter: brightness(0.95);
+  transform: translateY(-1px);
 }
 
-/* Destructive (Stop) maps to danger */
 .stop-btn {
   background: var(--danger);
-  border-color: var(--danger);
   color: #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
 }
 
 .stop-btn:hover {
-  filter: brightness(0.92);
+  filter: brightness(0.9);
+  transform: translateY(-1px);
 }
 
-/* Sub copy */
+/* Instruction text */
 .controls p {
   color: var(--muted);
-  margin: 8px 0 0;
+  font-size: 15px;
+  margin-top: -6px;
 }
 
-/* Checklist */
+/* Checklist card */
 .pose-checklist {
-  margin: 20px auto 0;
   background: var(--surface);
-  padding: 14px 18px;
-  border-radius: 12px;
-  text-align: left;
+  padding: 18px 20px;
+  border-radius: 14px;
   font-size: 15px;
   border: 1px solid var(--border);
-  box-shadow: 0 8px 30px var(--ring);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  text-align: left;
+  animation: fadeIn 0.4s ease;
 }
 
 .pose-checklist p {
-  margin: 0 0 8px;
-  color: var(--text);
+  margin: 0 0 10px;
   font-weight: 600;
+  color: var(--text);
 }
 
 .pose-checklist ul {
@@ -139,35 +132,47 @@ circle {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text);
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .pose-checklist li.done {
-  color: #22c55e; /* success green, matches your success chip vibe */
+  color: #22c55e;
   font-weight: 600;
 }
 
-/* Instruction line */
+/* Current instruction */
 .pose-instruction {
-  margin-top: 16px;
+  margin-top: 10px;
   font-size: 18px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--brand);
+  animation: pulse 1.6s infinite;
 }
 
-/* Warning (no face) */
+/* Warning message */
 .warning-text {
   color: var(--danger);
   font-weight: 600;
-  margin-top: 10px;
+  margin-top: 8px;
+  font-size: 15px;
 }
 
-/* Responsive tweaks */
+/* Animations */
+@keyframes pulse {
+  0%, 100% { opacity: 1 }
+  50% { opacity: 0.6 }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive */
 @media (max-width: 520px) {
-  .circle-wrapper,
-  .webcam-feed,
-  .circle-overlay {
-    width: 320px;
-    height: 320px;
+  .circle-wrapper {
+    width: 300px;
+    height: 300px;
   }
 }
