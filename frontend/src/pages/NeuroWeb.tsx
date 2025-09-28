@@ -1,3 +1,4 @@
+// src/pages/NeuroWeb.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuth } from "firebase/auth";
@@ -358,6 +359,8 @@ export default function NeuroWeb() {
   );
 
   /* --------------------------------- Actions --------------------------------- */
+  const navigateToAutomation = () => navigate("/automation");
+  const navigateToNeuroWeb = () => navigate("/neuroweb"); // adjust if this page lives on a different path
   const goToProfile = (f: Follower) => navigate(`/u/${f.slug}`);
   const messageUser = (f: Follower) => navigate(`/messages?to=${encodeURIComponent(f.uid)}`);
 
@@ -365,6 +368,45 @@ export default function NeuroWeb() {
   return (
     <div className="neuroweb-root">
       <Header />
+
+      {/* Toolbar sits *under* the header */}
+      <div className="neuroweb-toolbar" role="toolbar" aria-label="NeuroWeb mode switch">
+        <div className="neuroweb-toolbar-inner">
+          <div className="neuroweb-toolbar-left">
+            <button
+              className="nw-btn solid"
+              onClick={navigateToNeuroWeb}
+              aria-pressed={true}
+              title="Network visualization mode"
+            >
+              NeuroWeb
+            </button>
+            <button
+              className="nw-btn ghost"
+              onClick={navigateToAutomation}
+              aria-pressed={false}
+              title="Drag-and-drop autonomous outreach builder"
+            >
+              Autonomous
+            </button>
+          </div>
+
+          <div className="neuroweb-toolbar-right">
+            {focusOcc && (
+              <div className="neuroweb-subtle">
+                Focused on <strong className="neuroweb-strong">{focusOcc}</strong>
+                {selectedInterest ? (
+                  <>
+                    {" "}
+                    • filtered by <strong className="neuroweb-strong">{selectedInterest}</strong>
+                  </>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="neuroweb-grid">
         {/* Canvas */}
         <div ref={wrapRef} className="neuroweb-canvas-wrap">
@@ -511,14 +553,13 @@ export default function NeuroWeb() {
         </div>
 
         <NeuroAssistant
-  followers={followers}
-  onFocusOccupation={(occ) => focusOccupation(occ)}
-  onSelectInterest={(interest) => {
-    if (interest) setSelectedInterest(interest);
-  }}
-  recruiterText=""
-/>
-
+          followers={followers}
+          onFocusOccupation={(occ) => focusOccupation(occ)}
+          onSelectInterest={(interest) => {
+            if (interest) setSelectedInterest(interest);
+          }}
+          recruiterText=""
+        />
 
         {/* Right sidebar */}
         <aside className="neuroweb-aside">
@@ -527,17 +568,6 @@ export default function NeuroWeb() {
               <div className="neuroweb-title">Your NeuroWeb</div>
               <div className="neuroweb-subtle">{followers.length} connections</div>
             </div>
-            {focusOcc && (
-              <span className="neuroweb-subtle">
-                Focused on <strong className="neuroweb-strong">{focusOcc}</strong>
-                {selectedInterest ? (
-                  <>
-                    {" "}
-                    • filtered by <strong className="neuroweb-strong">{selectedInterest}</strong>
-                  </>
-                ) : null}
-              </span>
-            )}
           </div>
 
           {/* Occupations */}

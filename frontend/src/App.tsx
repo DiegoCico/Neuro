@@ -10,6 +10,7 @@ import RequireAuth from "./components/RequireAuth";
 import ProfilePage, { RedirectToMyProfile } from "./pages/ProfilePage";
 import MessagesScreen from "./pages/MessagesScreen";
 import NeuroWeb from "./pages/NeuroWeb";
+import AutomationPage from "./pages/Automation";
 
 export default function App() {
   return (
@@ -67,10 +68,18 @@ export default function App() {
         }
       />
       <Route
-        path="/your-neuroweb"
+        path="/neuroweb"
         element={
           <RequireAuth>
             <NeuroWeb />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/automation"
+        element={
+          <RequireAuth>
+            <AutomationPage />
           </RequireAuth>
         }
       />

@@ -1,5 +1,6 @@
 # app.py
 from __future__ import annotations
+import datetime
 from typing import List
 
 from flask import Flask, request, jsonify
@@ -19,6 +20,8 @@ from search import search_users
 
 from PIL import Image
 from face_store import save_face_enrollment
+
+import automation
 
 import ai
 
@@ -638,6 +641,135 @@ RECRUITER NOTES:
         "candidates": candidates[:8],
     }
     return jsonify(payload), 200
+
+@app.post("/google/meet")
+def google_meet():
+    """
+    Request: { title, startAtISO, durationMins, attendees: string[], timezone: string }
+    Response: { ok: true, meetUrl, eventId, calendarId }
+    """
+    user, err = automation._require_user()
+    if err:
+        return err
+
+    body = request.get_json(force=True, silent=True) or {}
+    title = str(body.get("title") or "Intro chat")
+    start_iso = str(body.get("startAtISO") or automation._now_iso())
+    duration_mins = int(body.get("durationMins") or 30)
+    attendees = body.get("attendees") or []
+    tz = str(body.get("timezone") or "America/New_York")
+
+    res = automation._create_google_meet_event(title, start_iso, duration_mins, attendees, tz)
+    if not res.get("ok"):
+        # we still return 200 with fallback link so front end can continue
+        return jsonify({"ok": True, "meetUrl": res.get("meetUrl"), "warning": res.get("error")})
+
+    return jsonify({"ok": True, "meetUrl": res.get("meetUrl"), "eventId": res.get("eventId"), "calendarId": res.get("calendarId")})
+
+@app.post("/agents/outreach/send")
+def outreach_send():
+    """
+    Request: { channel: "neuro_dm", toUid: string, subject: string, body: string }
+    Writes into Firestore: messages/{convId}/items/{auto-id}
+    Response: { ok: true, convId, messageId }
+    """
+    claims, err = automation._require_user()
+    if err:
+        return err
+
+    me = claims.get("uid")
+    if not me:
+        return automation._json_error(401, "No uid in token")
+
+    body = request.get_json(force=True, silent=True) or {}
+    channel = str(body.get("channel") or "neuro_dm")
+    to_uid = str(body.get("toUid") or "").strip()
+    subject = str(body.get("subject") or "").strip()
+    text = str(body.get("body") or "").strip()
+
+    if not to_uid:
+        return automation._json_error(400, "Missing 'toUid'")
+
+    conv_id = automation._conv_id_for(me, to_uid)
+    now = datetime.now(datetime.timezone.utc)
+
+    data = {
+        "from": me,
+        "to": to_uid,
+        "text": text if text else subject,
+        "subject": subject or None,
+        "channel": channel,
+        "createdAt": now,
+        "createdAtMs": int(now.timestamp() * 1000),
+        "automation": True,
+    }
+
+    doc_ref = db.collection("messages").document(conv_id).collection("items").document()
+    doc_ref.set(data)
+
+    # Optionally maintain a conversation head doc for quick lists
+    head_ref = db.collection("messages").document(conv_id)
+    head_ref.set({"lastUpdatedAt": now, "uids": [me, to_uid]}, merge=True)
+
+    return jsonify({"ok": True, "convId": conv_id, "messageId": doc_ref.id})
+
+@app.post("/agents/a2a/dispatch")
+def a2a_dispatch():
+    """
+    Request: { agent: "name", payload: any }
+    Response: { ok: true, agent: "name", result: { ... }, tookMs }
+    """
+    user, err = network._require_user()
+    if err:
+        return err
+
+    body = request.get_json(force=True, silent=True) or {}
+    agent = str(body.get("agent") or "").strip()
+    payload = body.get("payload", {})
+
+    if not agent:
+        return network._json_error(400, "Missing 'agent'")
+
+    t0 = datetime.time.time()
+
+    # Example agents (add your own and/or call external services)
+    if agent == "lead-qualifier":
+        person = payload.get("person", {})
+        summary = {
+            "name": person.get("fullName"),
+            "slug": person.get("slug"),
+            "occupation": person.get("occupation"),
+            "recommendation": "send_intro" if "Engineer" in (person.get("occupation") or "") else "ask_role",
+        }
+        result = {"summary": summary}
+    elif agent == "enricher":
+        # pretend to enrich from public sources
+        result = {"enriched": {"github": None, "linkedin": None}}
+    else:
+        result = {"echo": payload}
+
+    took_ms = int((datetime.time.time() - t0) * 1000)
+    return jsonify({"ok": True, "agent": agent, "result": result, "tookMs": took_ms})
+
+
+@app.post("/agents/adk/analyze")
+def adk_analyze():
+    """
+    Request: { text: string }
+    Response: { ok: true, sentiment: "...", intent: "yes|no|later|unknown" }
+    """
+    user, err = network._require_user()
+    if err:
+        return err
+
+    body = request.get_json(force=True, silent=True) or {}
+    text = str(body.get("text", "") or "")
+
+    # ---- Replace this block with a real Google ADK call if you have it wired. ----
+    result = network._infer_intent(text)
+    # ------------------------------------------------------------------------------
+
+    return jsonify({"ok": True, **result})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

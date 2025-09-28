@@ -317,7 +317,7 @@ export default function Header({ onSearch }: Props) {
                   className="dropdown-item"
                   onClick={() => {
                     setNetworkOpen(false);
-                    navigate("/your-neuroweb");
+                    navigate("/neuroweb");
                   }}
                 >
                   Your NeuroWeb
