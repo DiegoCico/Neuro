@@ -23,6 +23,8 @@ from face_store import save_face_enrollment, detect_face
 
 import automation
 
+from datetime import datetime, timezone
+
 import ai
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
@@ -149,61 +151,7 @@ def recognize_face():
         return jsonify({"ok": False, "error": "No image provided"}), 400
 
     try:
-        import base64, io
-        from PIL import Image
-        import numpy as np
-        import face_recognition
-        from firebase_admin import firestore
-
-        # Decode base64 image
-        img_b64 = image_data.split(",", 1)[1]
-        img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert("RGB")
-        img_np = np.array(img)
-
-        # Get embedding
-        encs = face_recognition.face_encodings(img_np)
-        if len(encs) != 1:
-            return jsonify({"ok": False, "error": "No face or multiple faces detected"}), 400
-
-        query_vec = encs[0]
-
-        # Fetch enrolled faces
-        db = firestore.client()
-        docs = list(db.collection("face").stream())
-
-        if not docs:
-            return jsonify({"ok": False, "error": "No enrolled users found"}), 404
-
-        best_uid = None
-        best_dist = float("inf")
-
-        for doc in docs:
-            emb = doc.to_dict().get("embeddings")
-            if not emb:
-                continue
-            stored_vec = np.array(emb)
-            dist = np.linalg.norm(query_vec - stored_vec)
-            if dist < best_dist:
-                best_dist = dist
-                best_uid = doc.id
-
-        # Ensure we actually found someone
-        if not best_uid:
-            return jsonify({"ok": False, "error": "No embeddings available"}), 404
-
-        MATCH_THRESHOLD = 0.6
-        if best_dist < MATCH_THRESHOLD:
-            return jsonify({
-                "ok": True,
-                "uid": best_uid,
-                "distance": float(best_dist)
-            }), 200
-        else:
-            return jsonify({
-                "ok": False,
-                "error": "No match found",
-                "distance": float(best_dist)
-            }), 404
+        return detect_face(image_data, db)
 
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -703,7 +651,7 @@ RECRUITER NOTES:
     }
     return jsonify(payload), 200
 
-@app.post("/google/meet")
+@app.post("/api/google/meet")
 def google_meet():
     """
     Request: { title, startAtISO, durationMins, attendees: string[], timezone: string }
@@ -727,7 +675,8 @@ def google_meet():
 
     return jsonify({"ok": True, "meetUrl": res.get("meetUrl"), "eventId": res.get("eventId"), "calendarId": res.get("calendarId")})
 
-@app.post("/agents/outreach/send")
+
+@app.post("/api/agents/outreach/send")
 def outreach_send():
     """
     Request: { channel: "neuro_dm", toUid: string, subject: string, body: string }
@@ -752,25 +701,35 @@ def outreach_send():
         return automation._json_error(400, "Missing 'toUid'")
 
     conv_id = automation._conv_id_for(me, to_uid)
-    now = datetime.now(datetime.timezone.utc)
+
+    # Use precise, timezone-aware UTC
+    now = datetime.now(timezone.utc)
+    # If you prefer server-side timestamp, swap to:
+    # now = firestore.SERVER_TIMESTAMP
 
     data = {
         "from": me,
         "to": to_uid,
-        "text": text if text else subject,
+        "text": text if text else subject,  # fall back to subject if body empty
         "subject": subject or None,
         "channel": channel,
         "createdAt": now,
-        "createdAtMs": int(now.timestamp() * 1000),
+        "createdAtMs": int(datetime.now(timezone.utc).timestamp() * 1000) if now is not firestore.SERVER_TIMESTAMP else None,
         "automation": True,
     }
 
-    doc_ref = db.collection("messages").document(conv_id).collection("items").document()
+    doc_ref = db.collection("conversations").document(conv_id).collection("messages").document()
     doc_ref.set(data)
 
-    # Optionally maintain a conversation head doc for quick lists
-    head_ref = db.collection("messages").document(conv_id)
-    head_ref.set({"lastUpdatedAt": now, "uids": [me, to_uid]}, merge=True)
+    # Maintain a conversation head for list views
+    head_ref = db.collection("conversations").document(conv_id)
+    head_ref.set(
+        {
+            "lastUpdatedAt": now,
+            "uids": sorted([me, to_uid]),
+        },
+        merge=True,
+    )
 
     return jsonify({"ok": True, "convId": conv_id, "messageId": doc_ref.id})
 

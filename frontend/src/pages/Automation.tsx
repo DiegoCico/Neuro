@@ -13,14 +13,14 @@ import "../css/Automation.css";
 type Point = { x: number; y: number };
 
 type BlockType =
-  | "audience"      // pick people to contact
-  | "message"       // send message template
-  | "wait"          // wait N hours/days
-  | "branch"        // branch by reply (yes/no/keyword/LLM sentiment)
-  | "meet"          // create a Google Meet and send invite
-  | "parallel"      // split into parallel subflows (Agent2Agent style)
-  | "loop"          // continuous loop (polling/cron-like)
-  | "agent"         // dispatch to sub-agent (A2A)
+  | "audience" // pick people to contact
+  | "message" // send message template
+  | "wait" // wait N hours/days
+  | "branch" // branch by reply (yes/no/keyword/LLM sentiment)
+  | "meet" // create a Google Meet and send invite
+  | "parallel" // split into parallel subflows (Agent2Agent style)
+  | "loop" // continuous loop (polling/cron-like)
+  | "agent" // dispatch to sub-agent (A2A)
   | "end";
 
 type Block = {
@@ -85,10 +85,16 @@ function blockDefaults(kind: BlockType): Partial<Block["config"]> {
   }
 }
 
-function within(p: Point, q: Point, r = 16) {
-  const dx = p.x - q.x;
-  const dy = p.y - q.y;
-  return dx * dx + dy * dy <= r * r;
+function successors(edges: Edge[], id: string) {
+  return edges.filter((e) => e.from === id).map((e) => e.to);
+}
+
+function bezierPath(a: Point, b: Point) {
+  // horizontal curve; control points pulled outwards
+  const dx = Math.max(48, Math.abs(b.x - a.x) * 0.5);
+  const c1 = { x: a.x + dx, y: a.y };
+  const c2 = { x: b.x - dx, y: b.y };
+  return `M ${a.x} ${a.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${b.x} ${b.y}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -233,10 +239,6 @@ async function sleepMinutes(mins: number, cancelledRef: React.MutableRefObject<b
     await new Promise((r) => setTimeout(r, step));
     t += step;
   }
-}
-
-function successors(edges: Edge[], id: string) {
-  return edges.filter((e) => e.from === id).map((e) => e.to);
 }
 
 async function executeFrom(
@@ -403,15 +405,23 @@ const PALETTE: PaletteItem[] = [
 function AutonomousBuilder() {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLDivElement | null>(null);
+
   const [blocks, setBlocks] = useState<Block[]>([
     { id: genId(), kind: "audience", title: "Audience", pos: { x: 160, y: 160 }, config: blockDefaults("audience") },
   ]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [sel, setSel] = useState<string | null>(blocks[0]?.id ?? null);
+
+  // Linking state (manual wire drawing)
   const [linkFrom, setLinkFrom] = useState<string | null>(null);
+  const [mousePt, setMousePt] = useState<Point | null>(null);
+
+  // Options
+  const [autoChain, setAutoChain] = useState(true);
+
+  // Run state
   const [logs, setLogs] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
-
   const { run, stop } = useRunner(blocks, edges);
 
   // Load audience from followers
@@ -445,13 +455,28 @@ function AutonomousBuilder() {
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${m}`].slice(-400));
   }, []);
 
-  const onDropPalette: React.DragEventHandler<HTMLDivElement> = (e) => {
-    e.preventDefault();
-    const kind = e.dataTransfer.getData("text/plain") as BlockType;
-    if (!kind) return;
+  /* ----------------------------- Canvas handlers ---------------------------- */
+
+  const toCanvasPoint = (clientX: number, clientY: number): Point => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    const x = e.clientX - (rect?.left || 0);
-    const y = e.clientY - (rect?.top || 0);
+    return {
+      x: clientX - (rect?.left || 0),
+      y: clientY - (rect?.top || 0),
+    };
+  };
+
+  const onCanvasPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!linkFrom) return;
+    setMousePt(toCanvasPoint(e.clientX, e.clientY));
+  };
+
+  const onCanvasLeave: React.PointerEventHandler<HTMLDivElement> = () => {
+    setMousePt(null);
+  };
+
+  /* ----------------------------- Block operations --------------------------- */
+
+  const addBlockAt = (kind: BlockType, x: number, y: number) => {
     const b: Block = {
       id: genId(),
       kind,
@@ -459,8 +484,26 @@ function AutonomousBuilder() {
       pos: { x, y },
       config: blockDefaults(kind),
     };
-    setBlocks((prev) => [...prev, b]);
+    setBlocks((prev) => {
+      const next = [...prev, b];
+      // auto-chain: connect previous last block to new block
+      if (autoChain) {
+        const prevLast = prev[prev.length - 1];
+        if (prevLast && !edges.some((e) => e.from === prevLast.id && e.to === b.id)) {
+          setEdges((es) => [...es, { from: prevLast.id, to: b.id }]);
+        }
+      }
+      return next;
+    });
     setSel(b.id);
+  };
+
+  const onDropPalette: React.DragEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault();
+    const kind = e.dataTransfer.getData("text/plain") as BlockType;
+    if (!kind) return;
+    const pt = toCanvasPoint(e.clientX, e.clientY);
+    addBlockAt(kind, pt.x, pt.y);
   };
 
   const onDragOver: React.DragEventHandler<HTMLDivElement> = (e) => {
@@ -468,14 +511,20 @@ function AutonomousBuilder() {
   };
 
   const startLink = (id: string) => setLinkFrom(linkFrom === id ? null : id);
+
   const endLink = (toId: string) => {
     if (!linkFrom || linkFrom === toId) return;
-    setEdges((prev) => [...prev, { from: linkFrom, to: toId }]);
+    setEdges((prev) => {
+      if (prev.some((e) => e.from === linkFrom && e.to === toId)) return prev;
+      return [...prev, { from: linkFrom, to: toId }];
+    });
     setLinkFrom(null);
+    setMousePt(null);
   };
 
-  const moveBlock = (id: string, to: Point) =>
+  const moveBlock = (id: string, to: Point) => {
     setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, pos: to } : b)));
+  };
 
   const selected = useMemo(() => blocks.find((b) => b.id === sel) || null, [blocks, sel]);
 
@@ -514,30 +563,35 @@ function AutonomousBuilder() {
     setSel(null);
   };
 
-  /* ---------------------------- Render helpers ---------------------------- */
+  const clearAll = () => {
+    setBlocks([]);
+    setEdges([]);
+    setSel(null);
+    setLinkFrom(null);
+    setMousePt(null);
+  };
 
-  const edgeLines = edges
+  /* ---------------------------- Render helpers ----------------------------- */
+
+  // Build a quick map for lookup
+  const blockMap = useMemo(() => {
+    const m = new Map<string, Block>();
+    blocks.forEach((b) => m.set(b.id, b));
+    return m;
+  }, [blocks]);
+
+  const edgeSvgs = edges
     .map((e, idx) => {
-      const a = blocks.find((b) => b.id === e.from);
-      const b = blocks.find((b) => b.id === e.to);
+      const a = blockMap.get(e.from);
+      const b = blockMap.get(e.to);
       if (!a || !b) return null;
+      const d = bezierPath(a.pos, b.pos);
+      const mid = { x: (a.pos.x + b.pos.x) / 2, y: (a.pos.y + b.pos.y) / 2 - 6 };
       return (
-        <g key={`${e.from}->${e.to}-${idx}`}>
-          <line
-            x1={a.pos.x}
-            y1={a.pos.y}
-            x2={b.pos.x}
-            y2={b.pos.y}
-            className="auto-edge edge-core"
-            markerEnd="url(#auto-arrow)"
-          />
+        <g key={`${e.from}->${e.to}-${idx}`} className="auto-edge">
+          <path d={d} className="edge-core" markerEnd="url(#auto-arrow)" />
           {e.label ? (
-            <text
-              x={(a.pos.x + b.pos.x) / 2}
-              y={(a.pos.y + b.pos.y) / 2 - 6}
-              className="auto-edge-label"
-              textAnchor="middle"
-            >
+            <text x={mid.x} y={mid.y} className="auto-edge-label" textAnchor="middle">
               {e.label}
             </text>
           ) : null}
@@ -546,14 +600,21 @@ function AutonomousBuilder() {
     })
     .filter(Boolean);
 
+  const tempWire = (() => {
+    if (!linkFrom || !mousePt) return null;
+    const a = blockMap.get(linkFrom);
+    if (!a) return null;
+    const d = bezierPath(a.pos, mousePt);
+    return <path d={d} className="edge-temp" markerEnd="url(#auto-arrow)" />;
+  })();
+
   return (
     <div className="auto-grid">
       {/* Canvas */}
       <div
         className="auto-canvas-wrap"
         style={{
-          backgroundImage:
-            "radial-gradient(#1c1c1c 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(#1c1c1c 1px, transparent 1px)",
           backgroundSize: "16px 16px",
         }}
       >
@@ -564,12 +625,15 @@ function AutonomousBuilder() {
               <path d="M0,0 L12,6 L0,12 z" fill="#d8d8d8" />
             </marker>
           </defs>
-          {edgeLines as any}
+          {edgeSvgs as any}
+          {tempWire}
         </svg>
 
         {/* Palette */}
         <div className="auto-controls" style={{ top: 12, left: 12, gap: 6 }}>
-          <div className="auto-title" style={{ marginBottom: 6 }}>Blocks</div>
+          <div className="auto-title" style={{ marginBottom: 6 }}>
+            Blocks
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxWidth: 540 }}>
             {PALETTE.map((p) => (
               <div
@@ -583,6 +647,19 @@ function AutonomousBuilder() {
               </div>
             ))}
           </div>
+          <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center" }}>
+            <label className="auto-toggle">
+              <input
+                type="checkbox"
+                checked={autoChain}
+                onChange={(e) => setAutoChain(e.target.checked)}
+              />
+              <span>Auto-chain new blocks</span>
+            </label>
+            <button className="auto-btn ghost" onClick={clearAll} title="Clear all">
+              Clear
+            </button>
+          </div>
         </div>
 
         {/* Canvas drop zone */}
@@ -591,6 +668,8 @@ function AutonomousBuilder() {
           onDrop={onDropPalette}
           onDragOver={onDragOver}
           className="auto-dropzone"
+          onPointerMove={onCanvasPointerMove}
+          onPointerLeave={onCanvasLeave}
         >
           {blocks.map((b) => (
             <DraggableBlock
@@ -625,7 +704,9 @@ function AutonomousBuilder() {
         <div className="auto-aside-head">
           <div>
             <div className="auto-title">Autonomous Builder</div>
-            <div className="auto-subtle">{blocks.length} blocks • {edges.length} connections</div>
+            <div className="auto-subtle">
+              {blocks.length} blocks • {edges.length} connections
+            </div>
           </div>
         </div>
 
@@ -638,15 +719,22 @@ function AutonomousBuilder() {
             </div>
           </div>
         ) : (
-          <div className="auto-subtle" style={{ padding: 8 }}>Select a block to configure.</div>
+          <div className="auto-subtle" style={{ padding: 8 }}>
+            Select a block to configure.
+          </div>
         )}
 
         {/* Logs */}
         <div className="auto-panel">
           <div className="auto-panel-head">Run Log</div>
-          <div className="auto-panel-list" style={{ maxHeight: 220, overflow: "auto", fontFamily: "ui-monospace, monospace", fontSize: 12 }}>
+          <div
+            className="auto-panel-list"
+            style={{ maxHeight: 220, overflow: "auto", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+          >
             {logs.map((l, i) => (
-              <div key={i} className="auto-subtle">{l}</div>
+              <div key={i} className="auto-subtle">
+                {l}
+              </div>
             ))}
           </div>
         </div>
@@ -754,10 +842,27 @@ function BlockInspector({
   if (block.kind === "audience") {
     return (
       <div className="auto-form">
-        <LabeledInput label="Source" value={cfg.source || "followers"} onChange={(e) => update({ source: e.target.value })} />
-        <LabeledInput label="Filter Occupation" value={cfg.filter?.occupation || ""} onChange={(e) => update({ filter: { ...(cfg.filter || {}), occupation: e.target.value || null } })} />
-        <LabeledInput label="Filter Interest" value={cfg.filter?.interest || ""} onChange={(e) => update({ filter: { ...(cfg.filter || {}), interest: e.target.value || null } })} />
-        <LabeledInput label="Sample Size" type="number" value={cfg.sample ?? 50} onChange={(e) => update({ sample: Number(e.target.value) })} />
+        <LabeledInput
+          label="Source"
+          value={cfg.source || "followers"}
+          onChange={(e) => update({ source: e.target.value })}
+        />
+        <LabeledInput
+          label="Filter Occupation"
+          value={cfg.filter?.occupation || ""}
+          onChange={(e) => update({ filter: { ...(cfg.filter || {}), occupation: e.target.value || null } })}
+        />
+        <LabeledInput
+          label="Filter Interest"
+          value={cfg.filter?.interest || ""}
+          onChange={(e) => update({ filter: { ...(cfg.filter || {}), interest: e.target.value || null } })}
+        />
+        <LabeledInput
+          label="Sample Size"
+          type="number"
+          value={cfg.sample ?? 50}
+          onChange={(e) => update({ sample: Number(e.target.value) })}
+        />
       </div>
     );
   }
@@ -765,10 +870,16 @@ function BlockInspector({
   if (block.kind === "message") {
     return (
       <div className="auto-form">
-        <LabeledInput label="Channel" value={cfg.channel || "neuro_dm"} onChange={(e) => update({ channel: e.target.value })} />
+        <LabeledInput
+          label="Channel"
+          value={cfg.channel || "neuro_dm"}
+          onChange={(e) => update({ channel: e.target.value })}
+        />
         <LabeledInput label="Subject" value={cfg.subject || ""} onChange={(e) => update({ subject: e.target.value })} />
         <TextArea label="Body" value={cfg.body || ""} onChange={(e) => update({ body: e.target.value })} />
-        <div className="auto-subtle">Templates support <code>{"{{name}}"}</code>.</div>
+        <div className="auto-subtle">
+          Templates support <code>{"{{name}}"}</code>.
+        </div>
       </div>
     );
   }
@@ -776,7 +887,12 @@ function BlockInspector({
   if (block.kind === "wait") {
     return (
       <div className="auto-form">
-        <LabeledInput label="Amount" type="number" value={cfg.amount ?? 24} onChange={(e) => update({ amount: Number(e.target.value) })} />
+        <LabeledInput
+          label="Amount"
+          type="number"
+          value={cfg.amount ?? 24}
+          onChange={(e) => update({ amount: Number(e.target.value) })}
+        />
         <LabeledInput label="Unit (hours/days)" value={cfg.unit || "hours"} onChange={(e) => update({ unit: e.target.value })} />
       </div>
     );
@@ -786,13 +902,28 @@ function BlockInspector({
     const outs = edges.map((e, idx) => ({ e, idx })).filter(({ e }) => e.from === block.id);
     return (
       <div className="auto-form">
-        <LabeledInput label="Mode (keyword/yesno/llm)" value={cfg.mode || "keyword"} onChange={(e) => update({ mode: e.target.value })} />
-        <LabeledInput label="Default Route Label" value={cfg.defaultToLabel || "default"} onChange={(e) => update({ defaultToLabel: e.target.value })} />
+        <LabeledInput
+          label="Mode (keyword/yesno/llm)"
+          value={cfg.mode || "keyword"}
+          onChange={(e) => update({ mode: e.target.value })}
+        />
+        <LabeledInput
+          label="Default Route Label"
+          value={cfg.defaultToLabel || "default"}
+          onChange={(e) => update({ defaultToLabel: e.target.value })}
+        />
         <div className="auto-subtle">Outgoing edge labels (match routes):</div>
         {outs.map(({ e, idx }) => (
-          <LabeledInput key={idx} label={`Edge ${idx + 1} label`} value={e.label || ""} onChange={(ev) => updateEdgeLabel(idx, ev.target.value)} />
+          <LabeledInput
+            key={idx}
+            label={`Edge ${idx + 1} label`}
+            value={e.label || ""}
+            onChange={(ev) => updateEdgeLabel(idx, ev.target.value)}
+          />
         ))}
-        <div className="auto-subtle">Use labels like <code>yes</code>, <code>no</code>, <code>later</code>, or custom keywords.</div>
+        <div className="auto-subtle">
+          Use labels like <code>yes</code>, <code>no</code>, <code>later</code>, or custom keywords.
+        </div>
       </div>
     );
   }
@@ -801,12 +932,21 @@ function BlockInspector({
     return (
       <div className="auto-form">
         <LabeledInput label="Title" value={cfg.title || ""} onChange={(e) => update({ title: e.target.value })} />
-        <LabeledInput label="Duration (mins)" type="number" value={cfg.durationMins ?? 30} onChange={(e) => update({ durationMins: Number(e.target.value) })} />
+        <LabeledInput
+          label="Duration (mins)"
+          type="number"
+          value={cfg.durationMins ?? 30}
+          onChange={(e) => update({ durationMins: Number(e.target.value) })}
+        />
         <LabeledInput label="When (auto/manual)" value={cfg.when || "auto"} onChange={(e) => update({ when: e.target.value })} />
         {cfg.when === "manual" ? (
           <LabeledInput label="Start Time (ISO)" value={cfg.startAtISO || ""} onChange={(e) => update({ startAtISO: e.target.value })} />
         ) : null}
-        <LabeledInput label="Timezone" value={cfg.timezone || "America/New_York"} onChange={(e) => update({ timezone: e.target.value })} />
+        <LabeledInput
+          label="Timezone"
+          value={cfg.timezone || "America/New_York"}
+          onChange={(e) => update({ timezone: e.target.value })}
+        />
       </div>
     );
   }
@@ -814,7 +954,12 @@ function BlockInspector({
   if (block.kind === "parallel") {
     return (
       <div className="auto-form">
-        <LabeledInput label="Branches (visual only)" type="number" value={cfg.branches ?? 2} onChange={(e) => update({ branches: Number(e.target.value) })} />
+        <LabeledInput
+          label="Branches (visual only)"
+          type="number"
+          value={cfg.branches ?? 2}
+          onChange={(e) => update({ branches: Number(e.target.value) })}
+        />
         <div className="auto-subtle">Connect multiple outgoing edges to run in parallel.</div>
       </div>
     );
@@ -832,8 +977,18 @@ function BlockInspector({
   if (block.kind === "loop") {
     return (
       <div className="auto-form">
-        <LabeledInput label="Every (mins)" type="number" value={cfg.everyMins ?? 10} onChange={(e) => update({ everyMins: Number(e.target.value) })} />
-        <LabeledInput label="Max Iterations (safety)" type="number" value={cfg.maxIterations ?? 100} onChange={(e) => update({ maxIterations: Number(e.target.value) })} />
+        <LabeledInput
+          label="Every (mins)"
+          type="number"
+          value={cfg.everyMins ?? 10}
+          onChange={(e) => update({ everyMins: Number(e.target.value) })}
+        />
+        <LabeledInput
+          label="Max Iterations (safety)"
+          type="number"
+          value={cfg.maxIterations ?? 100}
+          onChange={(e) => update({ maxIterations: Number(e.target.value) })}
+        />
         <div className="auto-subtle">Runner will execute continuously with this cadence.</div>
       </div>
     );
@@ -865,11 +1020,7 @@ export default function AutomationPage() {
             >
               NeuroWeb
             </button>
-            <button
-              className="auto-btn solid"
-              aria-pressed={true}
-              title="Drag-and-drop autonomous outreach builder"
-            >
+            <button className="auto-btn solid" aria-pressed={true} title="Drag-and-drop autonomous outreach builder">
               Autonomous
             </button>
           </div>

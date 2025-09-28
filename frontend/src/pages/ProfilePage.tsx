@@ -155,6 +155,11 @@ export default function ProfilePage() {
             const u = await fetchUserBySlug(slug.toLowerCase());
             if (alive) {
               setProfile(u);
+              console.log('U', u)
+              setTitle(data.about.title)
+              setBio(data.about.bio)
+              setCurrentFocus(data.about.currentFocus)
+              setBeyondWork(data.about.beyondWork)
 
               const res = await fetch(`${API_URL}/api/profile/about/${slug}`);
               if (res.ok) {
