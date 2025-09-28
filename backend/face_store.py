@@ -6,6 +6,7 @@ from PIL import Image
 import numpy as np
 import face_recognition
 from firebase_admin import firestore
+from flask import jsonify
 
 db = firestore.client()
 
@@ -110,3 +111,34 @@ def save_face_enrollment(uid: str, frames: List[Dict[str, Any]]) -> Dict[str, An
         "frames_saved": saved_frames,
         "embedding_dims": len(final_emb),
     }
+
+def detect_face(image_data, db):
+    img_b64 = image_data.split(',', 1)[1]
+    img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert('RGB')
+    img_np = np.array(img)
+
+    encs = face_recognition.face_encodings(img_np)
+    if len(encs) != 1:
+        return jsonify({"ok": False, "error": "No face or multiple faces detected"}), 400
+    query_vec = encs[0]
+
+    docs = db.collection('face').stream()
+    best_uid = None
+    best_dist = 999.0
+
+    for doc in docs:
+        emb = doc.to_dict().get('embeddings')
+        if not emb:
+            continue
+        stored_vec = np.array(emb)
+        dist = np.linalg.norm(query_vec - stored_vec)
+        if dist < best_dist:
+            best_dist = dist
+            best_uid = doc.id
+
+
+    MATCH_THRESHOLD = 0.6
+    if best_uid and best_dist < MATCH_THRESHOLD:
+        return jsonify({"ok": True, "uid": best_uid, "distance": float(best_dist)})
+    else:
+        return jsonify({"ok": False, "error": "No match found", "distance": float(best_dist)}), 404

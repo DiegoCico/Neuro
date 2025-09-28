@@ -19,7 +19,7 @@ import profiles_api as profiles
 from search import search_users
 
 from PIL import Image
-from face_store import save_face_enrollment
+from face_store import save_face_enrollment, detect_face
 
 import automation
 
@@ -144,9 +144,70 @@ def enroll_face():
 @app.post("/api/recognize-face")
 def recognize_face():
     data = request.get_json(silent=True) or {}
-    image_data = data.get('image')
+    image_data = data.get("image")
     if not image_data:
         return jsonify({"ok": False, "error": "No image provided"}), 400
+
+    try:
+        import base64, io
+        from PIL import Image
+        import numpy as np
+        import face_recognition
+        from firebase_admin import firestore
+
+        # Decode base64 image
+        img_b64 = image_data.split(",", 1)[1]
+        img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert("RGB")
+        img_np = np.array(img)
+
+        # Get embedding
+        encs = face_recognition.face_encodings(img_np)
+        if len(encs) != 1:
+            return jsonify({"ok": False, "error": "No face or multiple faces detected"}), 400
+
+        query_vec = encs[0]
+
+        # Fetch enrolled faces
+        db = firestore.client()
+        docs = list(db.collection("face").stream())
+
+        if not docs:
+            return jsonify({"ok": False, "error": "No enrolled users found"}), 404
+
+        best_uid = None
+        best_dist = float("inf")
+
+        for doc in docs:
+            emb = doc.to_dict().get("embeddings")
+            if not emb:
+                continue
+            stored_vec = np.array(emb)
+            dist = np.linalg.norm(query_vec - stored_vec)
+            if dist < best_dist:
+                best_dist = dist
+                best_uid = doc.id
+
+        # Ensure we actually found someone
+        if not best_uid:
+            return jsonify({"ok": False, "error": "No embeddings available"}), 404
+
+        MATCH_THRESHOLD = 0.6
+        if best_dist < MATCH_THRESHOLD:
+            return jsonify({
+                "ok": True,
+                "uid": best_uid,
+                "distance": float(best_dist)
+            }), 200
+        else:
+            return jsonify({
+                "ok": False,
+                "error": "No match found",
+                "distance": float(best_dist)
+            }), 404
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.get("/api/users/<slug>/experience")
 def api_list_experience(slug: str):

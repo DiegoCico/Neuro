@@ -9,6 +9,7 @@ import Post from "../components/Post";
 import { API_URL } from "../config";
 import { getAuth } from "firebase/auth";
 import Avatar from "../components/Avatar"
+import FaceDetect from "../components/FaceDetect";
 
 export type PostData = {
   id: string;
@@ -159,7 +160,7 @@ export default function Home() {
             {activeTab === "quickconnect" && (
               <div className="quick-connect">
                 <h2>Quick Connect</h2>
-                
+                <FaceDetect />
               </div>
             )}
 
